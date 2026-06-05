@@ -165,7 +165,7 @@ async function startAudioCapture() {
         };
 
         // 每1.5秒发一次音频块（降低延迟）
-        S.mediaRecorder.start(1500);
+        S.mediaRecorder.start(2000);
 
         audioTrack.addEventListener('ended', () => {
             if (S.isTranslating) stopTranslation();

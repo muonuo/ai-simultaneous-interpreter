@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 
 from config import config
 from translator import translate_text, add_to_history, get_recent_history
-from asr import AudioBuffer, transcribe_audio
+from asr import transcribe_audio
 
 app = FastAPI(title="AI 同声传译助手", version="0.1.0")
 
@@ -55,8 +55,6 @@ async def websocket_translate(websocket: WebSocket) -> None:
     """
     await websocket.accept()
 
-    audio_buffer = AudioBuffer(min_chunks=1)
-
     try:
         while True:
             # 接收文本或二进制消息
@@ -82,17 +80,9 @@ async def websocket_translate(websocket: WebSocket) -> None:
                     continue
 
             elif "bytes" in raw:
-                # 二进制消息：音频数据
+                # 二进制消息：音频数据（每个块独立转写，不拼接）
                 audio_chunk = raw["bytes"]
-                audio_buffer.add(audio_chunk)
-
-                if not audio_buffer.should_transcribe():
-                    continue
-
-                # 转写音频
-                audio_data = audio_buffer.get_audio()
-                audio_buffer.clear()
-                text = await transcribe_audio(audio_data)
+                text = await transcribe_audio(audio_chunk)
 
                 if not text:
                     continue
