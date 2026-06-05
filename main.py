@@ -29,13 +29,6 @@ async def pip_page() -> FileResponse:
     return FileResponse(static_dir / "pip.html")
 
 
-@app.get("/test")
-async def test_page() -> FileResponse:
-    """返回文件上传测试页面"""
-    return FileResponse(static_dir / "test.html")
-    """返回画中画字幕页面"""
-    return FileResponse(static_dir / "pip.html")
-
 
 # 缓存上一轮的 interim 翻译（用于自动纠错）
 _interim_translations: dict[str, str] = {}
