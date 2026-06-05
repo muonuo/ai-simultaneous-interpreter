@@ -4,6 +4,7 @@ AI 同声传译助手 - FastAPI 服务入口
 
 from pathlib import Path
 import json
+import asyncio
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
@@ -48,6 +49,16 @@ async def websocket_translate(websocket: WebSocket) -> None:
     """
     await websocket.accept()
 
+    # 翻译结果回调 → 直接推送到前端
+    def on_translation(en_text: str, zh_text: str):
+        asyncio.create_task(
+            websocket.send_text(json.dumps({
+                "en_text": en_text, "zh_text": zh_text, "type": "final",
+            }, ensure_ascii=False))
+        )
+
+    translator = get_translator(on_result=on_translation)
+
     try:
         while True:
             raw = await websocket.receive()
@@ -59,28 +70,9 @@ async def websocket_translate(websocket: WebSocket) -> None:
                 except json.JSONDecodeError:
                     continue
 
-                # 音频消息（base64 PCM）
+                # 音频消息 (base64)
                 if "audio" in msg:
-                    import base64
-                    try:
-                        pcm_bytes = base64.b64decode(msg["audio"])
-                        translator = get_translator()
-                        translator.send_audio(pcm_bytes)
-                    except Exception as e:
-                        print(f"[audio] decode error: {e}")
-
-                    # 检查翻译结果
-                    results = translator.get_translations()
-                    for r in results:
-                        if isinstance(r, tuple):
-                            _, en_text = r
-                            await websocket.send_text(json.dumps({
-                                "en_text": en_text, "zh_text": "", "type": "final",
-                            }, ensure_ascii=False))
-                        else:
-                            await websocket.send_text(json.dumps({
-                                "en_text": "", "zh_text": r, "type": "final",
-                            }, ensure_ascii=False))
+                    translator.send_audio(msg["audio"])
                     continue
 
                 # 文本翻译消息

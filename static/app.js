@@ -136,7 +136,7 @@ function disconnectWS() {
 }
 
 // ============================================================
-// 标签页音频 → AudioContext PCM → base64 → WebSocket → LiveTranslate
+// 标签页音频 → MediaRecorder → base64 → WebSocket → LiveTranslate
 // ============================================================
 async function startAudioCapture() {
     try {
@@ -145,35 +145,27 @@ async function startAudioCapture() {
             audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
         });
         stream.getVideoTracks().forEach(t => t.stop());
-        S._audioTrack = stream.getAudioTracks()[0];
-        if (!S._audioTrack) throw new Error('未检测到音频轨道');
+        const audioTrack = stream.getAudioTracks()[0];
+        if (!audioTrack) throw new Error('未检测到音频轨道');
+        audioTrack.addEventListener('ended', () => { if (S.isTranslating) stopTranslation(); });
 
-        S._audioTrack.addEventListener('ended', () => { if (S.isTranslating) stopTranslation(); });
+        const audioStream = new MediaStream([audioTrack]);
+        let mimeType = '';
+        for (const mt of ['audio/webm;codecs=opus', 'audio/webm']) {
+            if (MediaRecorder.isTypeSupported(mt)) { mimeType = mt; break; }
+        }
+        S._recorder = new MediaRecorder(audioStream, mimeType ? { mimeType } : {});
 
-        // 用 AudioContext 转 PCM 16kHz mono
-        const audioStream = new MediaStream([S._audioTrack]);
-        const audioCtx = new AudioContext({ sampleRate: 16000 });
-        const source = audioCtx.createMediaStreamSource(audioStream);
-        const processor = audioCtx.createScriptProcessor(2048, 1, 1);
-
-        processor.onaudioprocess = (e) => {
-            if (!S.isTranslating || !S.ws || S.ws.readyState !== WebSocket.OPEN) return;
-            const float32 = e.inputBuffer.getChannelData(0);
-            const int16 = new Int16Array(float32.length);
-            for (let i = 0; i < float32.length; i++) {
-                int16[i] = Math.max(-32768, Math.min(32767, float32[i] * 32768));
-            }
-            // 转 base64 发后端
-            const bytes = new Uint8Array(int16.buffer);
-            let binary = '';
-            for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-            S.ws.send(JSON.stringify({ audio: btoa(binary) }));
+        S._recorder.ondataavailable = (e) => {
+            if (e.data.size < 100 || !S.ws || S.ws.readyState !== WebSocket.OPEN) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+                const b64 = reader.result.split(',')[1];
+                if (b64) S.ws.send(JSON.stringify({ audio: b64 }));
+            };
+            reader.readAsDataURL(e.data);
         };
-
-        source.connect(processor);
-        processor.connect(audioCtx.destination);
-        S._audioCtx = audioCtx;
-        S._processor = processor;
+        S._recorder.start(1000);  // 1秒分片
         return stream;
     } catch (err) {
         if (err.name === 'AbortError') return null;
@@ -183,8 +175,7 @@ async function startAudioCapture() {
 }
 
 function stopRecording() {
-    if (S._audioCtx) { S._audioCtx.close(); S._audioCtx = null; }
-    if (S._processor) { S._processor.disconnect(); S._processor = null; }
+    if (S._recorder && S._recorder.state === 'recording') { S._recorder.stop(); S._recorder = null; }
 }
 
 // ============================================================
