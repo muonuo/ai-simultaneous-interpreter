@@ -200,24 +200,32 @@ function disconnectWS() {
 // ============================================================
 async function startAudioCapture() {
     try {
-        // 捕获浏览器标签页音频
-        const stream = await navigator.mediaDevices.getDisplayMedia({
-            video: false,
-            audio: {
-                echoCancellation: false,
-                noiseSuppression: false,
-                autoGainControl: false,
-            },
-        });
+        let stream;
 
-        // 如果用户关闭了共享，getDisplayMedia 会 reject
-        // 开始语音识别前，需要确保 stream 中有音频轨道
-        const audioTrack = stream.getAudioTracks()[0];
-        if (!audioTrack) {
-            throw new Error('未检测到音频轨道，请确保选择的标签页正在播放音频');
+        // 方案1: 纯音频捕获（Chrome 125+）
+        try {
+            stream = await navigator.mediaDevices.getDisplayMedia({
+                video: true,   // 必须包含 video，部分浏览器不支持纯音频
+                audio: {
+                    echoCancellation: false,
+                    noiseSuppression: false,
+                    autoGainControl: false,
+                },
+            });
+        } catch (err) {
+            throw new Error('无法访问屏幕音频: ' + err.message);
         }
 
-        // 创建新的 MediaStream 只包含音频
+        // 如果用户关闭了共享，getDisplayMedia 会 reject
+        // 停止视频轨道（只保留音频）
+        stream.getVideoTracks().forEach(t => t.stop());
+
+        const audioTrack = stream.getAudioTracks()[0];
+        if (!audioTrack) {
+            throw new Error('未检测到音频轨道。请在选择标签页时勾选"分享音频"选项。');
+        }
+
+        // 创建纯音频流
         const audioStream = new MediaStream([audioTrack]);
 
         // 初始化 Web Speech API
