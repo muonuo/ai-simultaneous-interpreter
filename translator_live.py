@@ -40,6 +40,7 @@ class LiveTranslator:
                 "translation": {"language": "zh"},
             },
         }))
+        self.ready.set()
 
     def _on_message(self, ws, msg):
         data = json.loads(msg)
