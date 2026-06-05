@@ -42,6 +42,7 @@ const D = {
     modeGroup: document.getElementById('mode-group'),
     langSelect: document.getElementById('lang-select'),
     fileInput: document.getElementById('file-input'),
+    fileBtn: document.querySelector('.file-btn'),
 };
 
 // ============================================================
@@ -524,6 +525,12 @@ D.langSelect.addEventListener('change', () => {
 });
 
 // 文件上传
+// 文件按钮点击（确保即使 hidden input 不触发也能打开文件选择）
+D.fileBtn.addEventListener('click', (e) => {
+    D.fileInput.click();
+});
+
+// 文件选择后处理
 D.fileInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
