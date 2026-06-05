@@ -42,7 +42,7 @@ const D = {
     modeGroup: document.getElementById('mode-group'),
     langSelect: document.getElementById('lang-select'),
     fileInput: document.getElementById('file-input'),
-    fileBtn: document.querySelector('.file-btn'),
+    fileBtn: document.getElementById('file-btn'),
 };
 
 // ============================================================
