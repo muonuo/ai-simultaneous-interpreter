@@ -136,72 +136,57 @@ function disconnectWS() {
 }
 
 // ============================================================
-// 音频捕获 + MediaRecorder → WebSocket
+// 麦克风采集 + Web Speech API 识别
 // ============================================================
 async function startAudioCapture() {
     try {
-        const stream = await navigator.mediaDevices.getDisplayMedia({
-            video: true,
-            audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+        const stream = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: false, noiseSuppression: true, autoGainControl: true },
         });
-        stream.getVideoTracks().forEach(t => t.stop());
-
-        const audioTrack = stream.getAudioTracks()[0];
-        if (!audioTrack) throw new Error('未检测到音频轨道');
-
-        const audioStream = new MediaStream([audioTrack]);
-
-        // MediaRecorder 编码音频 → 发 WebSocket 到后端 STT
-        let mimeType = '';
-        for (const mt of ['audio/webm;codecs=opus', 'audio/webm']) {
-            if (MediaRecorder.isTypeSupported(mt)) { mimeType = mt; break; }
-        }
-        S.mediaRecorder = new MediaRecorder(audioStream, mimeType ? { mimeType } : {});
-        let lastSize = 0;
-
-        S.mediaRecorder.ondataavailable = (event) => {
-            // 使用 requestData 获取完整录音（不是分片）
-            // 忽略分片事件，下面用定时器取完整音频
-        };
-
-        // 不用 timeslice，改为定时 requestData() 获取完整音频
-        S.mediaRecorder.start();
-
-        // 每 4 秒取一次完整录音发给后端
-        S._audioTimer = setInterval(() => {
-            if (S.mediaRecorder && S.mediaRecorder.state === 'recording') {
-                S.mediaRecorder.requestData();
-                // requestData 触发 ondataavailable，但数据在下一帧才到
-            }
-        }, 4000);
-
-        // 用 ondataavailable 接收 requestData 的完整数据
-        S.mediaRecorder.ondataavailable = (event) => {
-            if (event.data.size > lastSize + 1000 && S.ws && S.ws.readyState === WebSocket.OPEN) {
-                lastSize = event.data.size;
-                S.ws.send(event.data);
-            }
-        };
-
-        audioTrack.addEventListener('ended', () => {
-            if (S.isTranslating) stopTranslation();
-        });
-
-        return audioStream;
+        startSpeechRecognition();
+        return stream;
     } catch (err) {
-        if (err.name === 'AbortError') return null;
-        console.error('音频捕获失败:', err);
-        alert('音频捕获失败: ' + err.message);
+        console.error('麦克风访问失败:', err);
+        alert('无法访问麦克风，请允许浏览器使用麦克风权限');
         return null;
     }
 }
 
-function stopMediaRecorder() {
-    if (S._audioTimer) { clearInterval(S._audioTimer); S._audioTimer = null; }
-    if (S.mediaRecorder && S.mediaRecorder.state !== 'inactive') {
-        S.mediaRecorder.stop();
-        S.mediaRecorder = null;
-    }
+function startSpeechRecognition() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) { alert('请使用 Chrome 浏览器'); return; }
+
+    const rec = new SpeechRecognition();
+    rec.lang = 'en-US';
+    rec.continuous = true;
+    rec.interimResults = true;
+
+    rec.onresult = (event) => {
+        let interim = '', final = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const t = event.results[i][0].transcript.trim();
+            if (event.results[i].isFinal) final += t + ' ';
+            else interim += t + ' ';
+        }
+        if (final) {
+            S.broadcastTranslate.postMessage({ en_text: final.trim(), zh_text: '', type: 'final' });
+            if (S.ws && S.ws.readyState === WebSocket.OPEN) {
+                S.ws.send(JSON.stringify({ text: final.trim(), type: 'final', target_lang: S.settings.targetLang }));
+            }
+        }
+        if (interim) {
+            S.broadcastTranslate.postMessage({ en_text: interim.trim(), zh_text: '', type: 'interim' });
+        }
+    };
+
+    rec.onerror = (e) => { if (e.error !== 'no-speech') console.error('识别错误:', e.error); };
+    rec.onend = () => { if (S.isTranslating) { try { rec.start(); } catch {} } };
+    rec.start();
+    S._speechRec = rec;
+}
+
+function stopSpeech() {
+    if (S._speechRec) { S._speechRec.stop(); S._speechRec = null; }
 }
 
 // ============================================================
@@ -250,7 +235,7 @@ async function startTranslation() {
 
 function stopTranslation() {
     S.isTranslating = false; S.isPaused = false;
-    stopMediaRecorder();
+    stopSpeech();
     disconnectWS();
     closePipWindow();
     updateUI('ready');

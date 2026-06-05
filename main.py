@@ -10,7 +10,6 @@ from fastapi.responses import FileResponse
 
 from config import config
 from translator import translate_text, add_to_history, get_recent_history
-from asr import transcribe_audio
 
 app = FastAPI(title="AI 同声传译助手", version="0.1.0")
 
@@ -57,39 +56,19 @@ async def websocket_translate(websocket: WebSocket) -> None:
 
     try:
         while True:
-            # 接收文本或二进制消息
+            raw = await websocket.receive_text()
+
             try:
-                raw = await websocket.receive()
-            except WebSocketDisconnect:
-                break
-
-            if "text" in raw:
-                # 文本消息：直接翻译
-                text_data = raw["text"]
-                try:
-                    msg = json.loads(text_data)
-                    text = msg.get("text", text_data).strip()
-                    msg_type = msg.get("type", "final")
-                    target_lang = msg.get("target_lang", "zh")
-                except json.JSONDecodeError:
-                    text = text_data.strip()
-                    msg_type = "final"
-                    target_lang = "zh"
-
-                if not text:
-                    continue
-
-            elif "bytes" in raw:
-                # 二进制消息：音频数据（每个块独立转写，不拼接）
-                audio_chunk = raw["bytes"]
-                text = await transcribe_audio(audio_chunk)
-
-                if not text:
-                    continue
-
+                msg = json.loads(raw)
+                text = msg.get("text", raw).strip()
+                msg_type = msg.get("type", "final")
+                target_lang = msg.get("target_lang", "zh")
+            except json.JSONDecodeError:
+                text = raw.strip()
                 msg_type = "final"
                 target_lang = "zh"
-            else:
+
+            if not text:
                 continue
 
             # 调用七牛云 LLM 翻译
