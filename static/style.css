@@ -1,0 +1,227 @@
+/* AI 同声传译助手 - 样式 */
+
+*, *::before, *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0f0f0f;
+    color: #e0e0e0;
+    min-height: 100vh;
+}
+
+.container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* 头部 */
+header {
+    text-align: center;
+    padding: 30px 0 20px;
+}
+
+header h1 {
+    font-size: 2rem;
+    color: #ffffff;
+    margin-bottom: 8px;
+}
+
+.subtitle {
+    color: #888;
+    font-size: 0.95rem;
+}
+
+/* 输入区域 */
+.input-section {
+    background: #1a1a1a;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.input-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.tab-btn {
+    padding: 8px 20px;
+    border: 1px solid #333;
+    border-radius: 8px;
+    background: transparent;
+    color: #888;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+}
+
+.tab-btn.active {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #fff;
+}
+
+.input-area {
+    display: flex;
+    gap: 10px;
+}
+
+.input-area.hidden {
+    display: none;
+}
+
+#video-url {
+    flex: 1;
+    padding: 12px 16px;
+    border: 1px solid #333;
+    border-radius: 8px;
+    background: #0f0f0f;
+    color: #e0e0e0;
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+#video-url:focus {
+    border-color: #2563eb;
+}
+
+/* 按钮 */
+.btn {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.btn-primary {
+    background: #2563eb;
+    color: #fff;
+}
+
+.btn-success {
+    background: #16a34a;
+    color: #fff;
+}
+
+.btn-warning {
+    background: #ca8a04;
+    color: #fff;
+}
+
+.btn-secondary {
+    background: #525252;
+    color: #fff;
+}
+
+/* 视频区域 */
+.video-section {
+    background: #1a1a1a;
+    border-radius: 12px;
+    margin-bottom: 20px;
+    min-height: 300px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#video-container {
+    width: 100%;
+    min-height: 300px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+#video-container video,
+#video-container iframe {
+    width: 100%;
+    height: 400px;
+    border: none;
+}
+
+.placeholder-text {
+    color: #555;
+    font-size: 1.1rem;
+}
+
+/* 控制栏 */
+.controls {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+
+/* 字幕区域 */
+.subtitle-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.subtitle-panel {
+    background: #1a1a1a;
+    border-radius: 12px;
+    padding: 16px;
+    min-height: 200px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.subtitle-panel h3 {
+    font-size: 0.85rem;
+    color: #666;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.subtitle-content {
+    font-size: 1.1rem;
+    line-height: 1.6;
+}
+
+.subtitle-content .placeholder {
+    color: #444;
+}
+
+.subtitle-content .segment {
+    margin-bottom: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid #222;
+    transition: opacity 0.3s;
+}
+
+.subtitle-content .segment.interim {
+    opacity: 0.6;
+    font-style: italic;
+}
+
+.subtitle-content .segment.final {
+    opacity: 1;
+}
+
+/* 底部 */
+footer {
+    text-align: center;
+    padding: 20px 0;
+    color: #555;
+    font-size: 0.8rem;
+}

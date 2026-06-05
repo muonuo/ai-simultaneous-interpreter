@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 同声传译助手</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>AI 同声传译助手</h1>
+            <p class="subtitle">实时翻译英文视频，中英双语字幕</p>
+        </header>
+
+        <main>
+            <!-- 输入区域 -->
+            <section class="input-section">
+                <div class="input-tabs">
+                    <button class="tab-btn active" data-mode="link">粘贴链接</button>
+                    <button class="tab-btn" data-mode="file">上传文件</button>
+                </div>
+                <div class="input-area" id="link-mode">
+                    <input
+                        type="text"
+                        id="video-url"
+                        placeholder="粘贴 YouTube 或视频链接..."
+                    />
+                    <button id="load-btn" class="btn btn-primary">加载视频</button>
+                </div>
+                <div class="input-area hidden" id="file-mode">
+                    <input
+                        type="file"
+                        id="file-input"
+                        accept="video/*,audio/*"
+                    />
+                </div>
+            </section>
+
+            <!-- 视频播放区域 -->
+            <section class="video-section">
+                <div id="video-container">
+                    <p class="placeholder-text">请粘贴链接或上传文件开始</p>
+                </div>
+            </section>
+
+            <!-- 控制栏 -->
+            <section class="controls">
+                <button id="start-btn" class="btn btn-success" disabled>开始翻译</button>
+                <button id="pause-btn" class="btn btn-warning" disabled>暂停</button>
+                <button id="export-btn" class="btn btn-secondary" disabled>导出字幕</button>
+            </section>
+
+            <!-- 字幕区域 -->
+            <section class="subtitle-section">
+                <div class="subtitle-panel" id="en-subtitle">
+                    <h3>英文原文</h3>
+                    <div class="subtitle-content" id="en-text">
+                        <p class="placeholder">等待识别...</p>
+                    </div>
+                </div>
+                <div class="subtitle-panel" id="zh-subtitle">
+                    <h3>中文翻译</h3>
+                    <div class="subtitle-content" id="zh-text">
+                        <p class="placeholder">等待翻译...</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Powered by 七牛云 AI | 2026 XEngineer 暑期实训营</p>
+        </footer>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
