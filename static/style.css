@@ -344,9 +344,7 @@ html, body {
     align-items: center;
     justify-content: center;
     gap: 10px;
-    margin-top: 24px;
-    padding-top: 24px;
-    border-top: 1px solid var(--border);
+    margin-top: 16px;
 }
 
 .file-label {
