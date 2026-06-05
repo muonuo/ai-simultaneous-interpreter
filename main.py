@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 
 from config import config
 from translator import translate_text, add_to_history, get_recent_history
+from asr import AudioBuffer, transcribe_audio
 
 app = FastAPI(title="AI 同声传译助手", version="0.1.0")
 
@@ -45,30 +46,60 @@ _interim_translations: dict[str, str] = {}
 async def websocket_translate(websocket: WebSocket) -> None:
     """
     翻译 WebSocket 端点
-
-    接收（JSON）:
-    {"text": "The quick brown fox", "type": "final"|"interim", "target_lang": "zh"}
+    支持两种消息类型：
+    1. 文本 (JSON): 直接翻译文本
+    2. 二进制: 音频数据 → STT 转写 → 翻译
 
     返回（JSON）:
     {"en_text": "...", "zh_text": "...", "type": "final"|"interim"|"corrected"}
     """
     await websocket.accept()
 
+    audio_buffer = AudioBuffer(min_chunks=3)
+
     try:
         while True:
-            raw = await websocket.receive_text()
-
+            # 接收文本或二进制消息
             try:
-                msg = json.loads(raw)
-                text = msg.get("text", raw).strip()
-                msg_type = msg.get("type", "final")
-                target_lang = msg.get("target_lang", "zh")
-            except json.JSONDecodeError:
-                text = raw.strip()
+                raw = await websocket.receive()
+            except WebSocketDisconnect:
+                break
+
+            if "text" in raw:
+                # 文本消息：直接翻译
+                text_data = raw["text"]
+                try:
+                    msg = json.loads(text_data)
+                    text = msg.get("text", text_data).strip()
+                    msg_type = msg.get("type", "final")
+                    target_lang = msg.get("target_lang", "zh")
+                except json.JSONDecodeError:
+                    text = text_data.strip()
+                    msg_type = "final"
+                    target_lang = "zh"
+
+                if not text:
+                    continue
+
+            elif "bytes" in raw:
+                # 二进制消息：音频数据
+                audio_chunk = raw["bytes"]
+                audio_buffer.add(audio_chunk)
+
+                if not audio_buffer.should_transcribe():
+                    continue
+
+                # 转写音频
+                audio_data = audio_buffer.get_audio()
+                audio_buffer.clear()
+                text = await transcribe_audio(audio_data)
+
+                if not text:
+                    continue
+
                 msg_type = "final"
                 target_lang = "zh"
-
-            if not text:
+            else:
                 continue
 
             # 调用七牛云 LLM 翻译
@@ -78,28 +109,27 @@ async def websocket_translate(websocket: WebSocket) -> None:
                 history=history,
             )
 
-            # 自动纠错：final 翻译与之前 interim 差异时标记为 corrected
+            # 自动纠错
             out_type = msg_type
             if msg_type == "final":
                 prev = _interim_translations.pop(text[:60], None)
                 if prev and prev != zh_text:
                     out_type = "corrected"
 
-            # 发送翻译结果
+            # 发送结果
             await websocket.send_text(json.dumps({
                 "en_text": text,
                 "zh_text": zh_text,
                 "type": out_type,
             }, ensure_ascii=False))
 
-            # 记录翻译历史
+            # 记录历史
             if msg_type == "final" and zh_text:
                 add_to_history(text, zh_text)
 
     except WebSocketDisconnect:
         pass
     finally:
-        # 清理该连接的临时状态
         _interim_translations.clear()
 
 
