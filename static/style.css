@@ -338,39 +338,6 @@ html, body {
     min-height: 20px;
 }
 
-/* --- 文件上传 --- */
-.file-upload-area {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    margin-top: 16px;
-}
-
-.file-label {
-    font-size: 12px;
-    color: var(--text-muted);
-}
-
-.file-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 7px 14px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-dim);
-    cursor: pointer;
-    transition: all 0.15s;
-}
-
-.file-btn:hover {
-    background: var(--bg-hover);
-    border-color: var(--border-strong);
-    color: var(--text);
-}
 
 /* --- 响应式 --- */
 @media (max-width: 480px) {
