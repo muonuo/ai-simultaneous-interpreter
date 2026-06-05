@@ -44,22 +44,25 @@ class LiveTranslator:
     def _on_message(self, ws, msg):
         data = json.loads(msg)
         t = data.get("type", "")
-        print(f"[LiveTranslate] {t}")
+        print(f"[LiveTranslate] {t} {json.dumps(data, ensure_ascii=False)[:200]}")
 
-        # 中文翻译结果
+        # 中文翻译
         if t == "response.audio_transcript.done":
             zh = data.get("transcript", "")
             if zh and self._on_result:
                 self._on_result("", zh)
 
-        # 英文转录结果
+        # 英文转录
         elif t == "conversation.item.input_audio_transcription.completed":
             en = data.get("transcript", "")
             if en and self._on_result:
                 self._on_result(en, "")
 
-        elif t == "error":
-            print(f"[LiveTranslate] Error: {json.dumps(data, ensure_ascii=False)[:300]}")
+        # 也有可能在其他字段
+        elif "transcript" in data:
+            txt = data.get("transcript", "")
+            if txt and self._on_result and t not in ("session.updated",):
+                self._on_result("", txt)
 
     def _on_error(self, ws, err):
         print(f"[LiveTranslate] WS Error: {err}")
