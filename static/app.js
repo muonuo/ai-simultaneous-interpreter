@@ -45,59 +45,67 @@ const D = {
 };
 
 // ============================================================
-// 画中画窗口管理
+// 字幕窗口管理（支持多种降级方案）
 // ============================================================
 async function openPipWindow() {
     if (S.pipWindow && !S.pipWindow.closed) {
         S.pipWindow.focus();
-        return;
+        return true;
     }
 
-    try {
-        // Document Picture-in-Picture API
-        S.pipWindow = await documentPictureInPicture.requestWindow({
-            width: 600,
-            height: 160,
-        });
+    const pipUrl = `${location.origin}/pip`;
 
-        // 加载字幕页面
-        const pipUrl = `${location.origin}/static/pip.html`;
-        S.pipWindow.document.write(`
-            <!DOCTYPE html>
-            <html><head><meta charset="UTF-8"></head>
-            <body style="margin:0;overflow:hidden;">
-                <iframe src="${pipUrl}" style="width:100%;height:100%;border:none;"></iframe>
-            </body></html>
-        `);
-
-        // PiP 窗口关闭时清理
-        S.pipWindow.addEventListener('pagehide', () => {
-            S.pipWindow = null;
-        });
-
-        // 发送当前设置
-        S.broadcastSettings.postMessage(S.settings);
-
-        updateUI('pip');
-        return true;
-    } catch (err) {
-        console.error('PiP 窗口打开失败:', err);
-        // 降级：在新标签页打开
-        const win = window.open(
-            '/static/pip.html',
-            'simulcast-subtitles',
-            'width=600,height=160,alwaysOnTop=yes'
-        );
-        if (win) {
-            S.pipWindow = win;
-            win.addEventListener('beforeunload', () => { S.pipWindow = null; });
+    // 方案1: Document Picture-in-Picture（Chrome 116+）
+    if (documentPictureInPicture && documentPictureInPicture.requestWindow) {
+        try {
+            S.pipWindow = await documentPictureInPicture.requestWindow({
+                width: 640,
+                height: 180,
+            });
+            S.pipWindow.document.body.style.margin = '0';
+            S.pipWindow.document.body.style.overflow = 'hidden';
+            S.pipWindow.document.body.innerHTML = `
+                <iframe src="${pipUrl}" style="width:100vw;height:100vh;border:none;"></iframe>
+            `;
+            S.pipWindow.addEventListener('pagehide', () => {
+                S.pipWindow = null;
+            });
             S.broadcastSettings.postMessage(S.settings);
             updateUI('pip');
+            console.log('字幕窗口: Document PiP');
+            return true;
+        } catch (err) {
+            console.warn('Document PiP 失败, 尝试降级方案:', err.message);
+        }
+    }
+
+    // 方案2: 普通弹窗（可能被拦截）
+    try {
+        const features = 'width=680,height=200,left=100,top=' + (screen.height - 280);
+        S.pipWindow = window.open(pipUrl, 'simulcast-subtitles', features);
+        if (S.pipWindow) {
+            S.pipWindow.addEventListener('beforeunload', () => { S.pipWindow = null; });
+            // 等待窗口加载后发送设置
+            S.pipWindow.addEventListener('load', () => {
+                S.broadcastSettings.postMessage(S.settings);
+            });
+            S.broadcastSettings.postMessage(S.settings);
+            updateUI('pip');
+            console.log('字幕窗口: window.open');
             return true;
         }
-        alert('无法打开字幕窗口，请检查浏览器是否阻止了弹出窗口。');
-        return false;
+    } catch (err) {
+        console.warn('弹窗被拦截:', err.message);
     }
+
+    // 方案3: 内联字幕（在主页面显示）
+    console.log('字幕窗口: 内联降级模式');
+    const inlineSubtitles = document.getElementById('inline-subtitles');
+    if (inlineSubtitles) {
+        inlineSubtitles.style.display = 'block';
+    }
+    updateUI('inline');
+    return true;
 }
 
 function closePipWindow() {
@@ -105,7 +113,29 @@ function closePipWindow() {
         S.pipWindow.close();
     }
     S.pipWindow = null;
+    // 隐藏内联字幕
+    const inline = document.getElementById('inline-subtitles');
+    if (inline) inline.style.display = 'none';
 }
+
+// 初始化：监听翻译消息，渲染到内联字幕（降级方案）
+S.broadcastTranslate.addEventListener('message', (e) => {
+    const { en_text, zh_text, type } = e.data;
+    const inlineEn = document.getElementById('inline-en');
+    const inlineZh = document.getElementById('inline-zh');
+    if (!inlineEn || !inlineZh) return;
+
+    if (en_text) {
+        inlineEn.textContent = en_text;
+        inlineEn.style.fontStyle = type === 'interim' ? 'italic' : 'normal';
+        inlineEn.style.opacity = type === 'interim' ? '0.5' : '1';
+    }
+    if (zh_text) {
+        inlineZh.textContent = zh_text;
+        inlineZh.style.fontStyle = type === 'interim' ? 'italic' : 'normal';
+        inlineZh.style.opacity = type === 'interim' ? '0.5' : '1';
+    }
+});
 
 // ============================================================
 // WebSocket

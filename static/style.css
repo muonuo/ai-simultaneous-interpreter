@@ -299,6 +299,45 @@ html, body {
 
 .info-version { color: var(--text-muted); font-size: 11px; }
 
+/* --- 内联字幕（降级方案） --- */
+.inline-subtitles {
+    width: 100%;
+    padding: 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    margin-top: 20px;
+    min-height: 80px;
+}
+
+.inline-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.inline-row:last-child { margin-bottom: 0; }
+
+.inline-tag {
+    flex-shrink: 0;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-top: 2px;
+}
+
+.inline-tag.tag-en { background: rgba(79,143,255,0.2); color: #4f8fff; }
+.inline-tag.tag-zh { background: rgba(52,211,153,0.2); color: #34d399; }
+
+.inline-text {
+    font-size: 14px;
+    color: var(--text);
+    line-height: 1.5;
+    min-height: 20px;
+}
+
 /* --- 文件上传 --- */
 .file-upload-area {
     display: flex;

@@ -4,7 +4,6 @@ AI 同声传译助手 - FastAPI 服务入口
 
 from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from config import config
@@ -64,5 +63,11 @@ async def websocket_translate(websocket: WebSocket) -> None:
         pass
 
 
-# 挂载静态文件（必须在路由注册之后）
-app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+# 静态文件（不使用 app.mount 避免 WebSocket 路由冲突）
+@app.get("/static/{filename:path}")
+async def static_files(filename: str):
+    """静态文件服务"""
+    file_path = static_dir / filename
+    if file_path.exists() and file_path.is_file():
+        return FileResponse(file_path)
+    return FileResponse(static_dir / "index.html")
