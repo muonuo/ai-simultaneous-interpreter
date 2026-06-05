@@ -55,7 +55,7 @@ async def websocket_translate(websocket: WebSocket) -> None:
     """
     await websocket.accept()
 
-    audio_buffer = AudioBuffer(min_chunks=3)
+    audio_buffer = AudioBuffer(min_chunks=1)
 
     try:
         while True:

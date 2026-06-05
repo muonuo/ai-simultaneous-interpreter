@@ -164,8 +164,8 @@ async function startAudioCapture() {
             }
         };
 
-        // 每3秒发一次音频块（平衡延迟和识别准确率）
-        S.mediaRecorder.start(3000);
+        // 每1.5秒发一次音频块（降低延迟）
+        S.mediaRecorder.start(1500);
 
         audioTrack.addEventListener('ended', () => {
             if (S.isTranslating) stopTranslation();
@@ -208,7 +208,7 @@ async function startFileMode(file) {
             S.ws.send(event.data);
         }
     };
-    S.mediaRecorder.start(3000);
+    S.mediaRecorder.start(1500);
 
     media.addEventListener('ended', () => { if (S.isTranslating) stopTranslation(); });
     return stream;
