@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SimulCast 字幕</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --font-sans: 'Inter', 'Noto Sans SC', -apple-system, sans-serif;
+        }
+
+        body {
+            font-family: var(--font-sans);
+            background: rgba(0, 0, 0, 0.85);
+            color: #fff;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            padding: 12px 16px;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+
+        .subtitle-container {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .subtitle-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            line-height: 1.4;
+        }
+
+        .subtitle-tag {
+            flex-shrink: 0;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 1px 6px;
+            border-radius: 3px;
+            letter-spacing: 0.5px;
+            margin-top: 3px;
+            opacity: 0.8;
+        }
+
+        .tag-en { background: rgba(79, 143, 255, 0.3); color: #4f8fff; }
+        .tag-zh { background: rgba(52, 211, 153, 0.3); color: #34d399; }
+
+        .subtitle-text {
+            flex: 1;
+            font-size: 20px;
+            font-weight: 500;
+            letter-spacing: -0.2px;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+            min-height: 24px;
+            word-break: break-word;
+        }
+
+        .subtitle-text.zh {
+            font-size: 22px;
+            font-weight: 600;
+        }
+
+        .placeholder {
+            opacity: 0.3;
+            font-weight: 400;
+            font-style: italic;
+        }
+
+        .segment {
+            display: inline;
+            margin-right: 4px;
+            transition: opacity 0.2s;
+        }
+
+        .segment.interim {
+            opacity: 0.5;
+            font-style: italic;
+        }
+
+        .segment.final {
+            opacity: 1;
+            font-style: normal;
+        }
+
+        .segment.corrected {
+            animation: flash 0.5s ease;
+        }
+
+        @keyframes flash {
+            0% { background: rgba(79, 143, 255, 0.4); border-radius: 3px; }
+            100% { background: transparent; }
+        }
+
+        /* 大字模式 */
+        .font-large .subtitle-text { font-size: 26px; }
+        .font-large .subtitle-text.zh { font-size: 28px; }
+
+        /* 叠加模式 */
+        .mode-overlay body {
+            background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.4) 60%, transparent 100%);
+        }
+    </style>
+</head>
+<body>
+    <div class="subtitle-container">
+        <div class="subtitle-row" id="en-row">
+            <span class="subtitle-tag tag-en">EN</span>
+            <div class="subtitle-text" id="en-text">
+                <span class="placeholder">等待语音输入...</span>
+            </div>
+        </div>
+        <div class="subtitle-row" id="zh-row">
+            <span class="subtitle-tag tag-zh">中</span>
+            <div class="subtitle-text zh" id="zh-text">
+                <span class="placeholder">翻译将在此显示</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * 画中画字幕窗口 — 接收主页面广播的翻译结果
+         */
+
+        const enText = document.getElementById('en-text');
+        const zhText = document.getElementById('zh-text');
+        const container = document.querySelector('.subtitle-container');
+
+        let settings = { fontSize: 'medium', mode: 'bottom' };
+
+        // 监听主页面设置
+        const bcSettings = new BroadcastChannel('simulcast-settings');
+        bcSettings.onmessage = (e) => {
+            settings = { ...settings, ...e.data };
+            document.documentElement.className = '';
+            if (settings.fontSize !== 'medium') {
+                document.documentElement.classList.add(`font-${settings.fontSize}`);
+            }
+            if (settings.mode === 'overlay') {
+                document.documentElement.classList.add('mode-overlay');
+            }
+        };
+
+        // 监听翻译结果
+        const bcTranslate = new BroadcastChannel('simulcast-translate');
+        bcTranslate.onmessage = (e) => {
+            const { en_text, zh_text, type } = e.data;
+            if (en_text) appendSegment(enText, en_text, type);
+            if (zh_text) appendSegment(zhText, zh_text, type);
+        };
+
+        function appendSegment(el, text, type) {
+            const placeholder = el.querySelector('.placeholder');
+            if (placeholder) placeholder.remove();
+
+            if (type === 'final') {
+                const interim = el.querySelector('.segment.interim');
+                if (interim) {
+                    interim.textContent = text;
+                    interim.classList.remove('interim');
+                    interim.classList.add('final');
+                    return;
+                }
+                const seg = document.createElement('span');
+                seg.className = 'segment final';
+                seg.textContent = text;
+                el.appendChild(seg);
+            } else if (type === 'corrected') {
+                const finals = el.querySelectorAll('.segment.final');
+                const last = finals[finals.length - 1];
+                if (last) {
+                    last.textContent = text;
+                    last.classList.add('corrected');
+                    setTimeout(() => last.classList.remove('corrected'), 500);
+                }
+            } else {
+                let interim = el.querySelector('.segment.interim');
+                if (!interim) {
+                    interim = document.createElement('span');
+                    interim.className = 'segment interim';
+                    el.appendChild(interim);
+                }
+                interim.textContent = text;
+            }
+        }
+
+        console.log('SimulCast 字幕窗口已就绪');
+    </script>
+</body>
+</html>
