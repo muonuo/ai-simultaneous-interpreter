@@ -25,11 +25,6 @@
             </div>
         </header>
 
-        <!-- 文件上传（独立于 flex 布局） -->
-        <div style="text-align:center;padding:12px 0;">
-            <input type="file" id="file-input" accept="video/*,audio/*" style="font-size:13px;color:#808090;">
-        </div>
-
         <!-- 主内容 -->
         <main class="main-content">
             <!-- 状态卡片 -->
@@ -73,6 +68,20 @@
                         <option value="ja">日本語</option>
                         <option value="ko">한국어</option>
                     </select>
+                </div>
+            </div>
+
+            <!-- 本地文件上传 -->
+            <div class="local-file-card">
+                <div class="local-file-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                </div>
+                <div class="local-file-text">
+                    <strong>本地文件翻译</strong>
+                    <span>上传电脑上的视频或音频文件，直接获取翻译字幕</span>
+                </div>
+                <div class="local-file-action">
+                    <input type="file" id="file-input" accept="video/*,audio/*">
                 </div>
             </div>
 
