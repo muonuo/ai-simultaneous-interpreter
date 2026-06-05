@@ -26,6 +26,14 @@ async def pip_page() -> FileResponse:
     return FileResponse(static_dir / "pip.html")
 
 
+@app.get("/test")
+async def test_page() -> FileResponse:
+    """返回文件上传测试页面"""
+    return FileResponse(static_dir / "test.html")
+    """返回画中画字幕页面"""
+    return FileResponse(static_dir / "pip.html")
+
+
 @app.websocket("/ws/translate")
 async def websocket_translate(websocket: WebSocket) -> None:
     """

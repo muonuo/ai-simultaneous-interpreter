@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>文件上传测试</title></head>
+<body>
+    <h2>文件上传测试页面</h2>
+    <p>这个页面没有任何复杂CSS，确认文件选择是否可用：</p>
+    <input type="file" id="file-input" accept="video/*,audio/*">
+    <div id="status" style="margin-top:10px;"></div>
+    <script>
+        document.getElementById('file-input').addEventListener('change', function(e) {
+            var file = e.target.files[0];
+            if (file) {
+                document.getElementById('status').textContent = '已选择: ' + file.name;
+            }
+        });
+        // 连接到主页面的 WebSocket 测试
+        var ws = new WebSocket('ws://' + location.host + '/ws/translate');
+        ws.onopen = function() { console.log('WS connected'); };
+        ws.onmessage = function(e) { console.log('WS:', e.data); };
+    </script>
+</body>
+</html>
