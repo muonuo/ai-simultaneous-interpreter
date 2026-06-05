@@ -13,10 +13,10 @@ class Config:
 
     # 七牛云 API
     QINIU_API_KEY: str = os.getenv("QINIU_API_KEY", "")
-    QINIU_BASE_URL: str = os.getenv("QINIU_BASE_URL", "https://api.qiniu.com/v1/ai")
+    QINIU_BASE_URL: str = os.getenv("QINIU_BASE_URL", "https://api.qnaigc.com/v1")
 
     # 翻译模型
-    TRANSLATION_MODEL: str = os.getenv("TRANSLATION_MODEL", "deepseek-v3")
+    TRANSLATION_MODEL: str = os.getenv("TRANSLATION_MODEL", "deepseek/deepseek-v4-flash")
 
     # 服务配置
     HOST: str = os.getenv("HOST", "127.0.0.1")
