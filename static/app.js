@@ -136,57 +136,70 @@ function disconnectWS() {
 }
 
 // ============================================================
-// 麦克风采集 + Web Speech API 识别
+// 标签页音频捕获 + MediaRecorder 定时重启 → 后端 STT
 // ============================================================
 async function startAudioCapture() {
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-            audio: { echoCancellation: false, noiseSuppression: true, autoGainControl: true },
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+            video: true,
+            audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
         });
-        startSpeechRecognition();
+        stream.getVideoTracks().forEach(t => t.stop());
+        S._audioTrack = stream.getAudioTracks()[0];
+        if (!S._audioTrack) throw new Error('未检测到音频轨道');
+
+        S._audioTrack.addEventListener('ended', () => { if (S.isTranslating) stopTranslation(); });
+        startRecordingCycle();
         return stream;
     } catch (err) {
-        console.error('麦克风访问失败:', err);
-        alert('无法访问麦克风，请允许浏览器使用麦克风权限');
+        if (err.name === 'AbortError') return null;
+        alert('音频捕获失败: ' + err.message);
         return null;
     }
 }
 
-function startSpeechRecognition() {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) { alert('请使用 Chrome 浏览器'); return; }
+function startRecordingCycle() {
+    const audioStream = new MediaStream([S._audioTrack]);
+    let mimeType = '';
+    for (const mt of ['audio/webm;codecs=opus', 'audio/webm']) {
+        if (MediaRecorder.isTypeSupported(mt)) { mimeType = mt; break; }
+    }
 
-    const rec = new SpeechRecognition();
-    rec.lang = 'en-US';
-    rec.continuous = true;
-    rec.interimResults = true;
+    const recorder = new MediaRecorder(audioStream, mimeType ? { mimeType } : {});
+    const chunks = [];
 
-    rec.onresult = (event) => {
-        let interim = '', final = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-            const t = event.results[i][0].transcript.trim();
-            if (event.results[i].isFinal) final += t + ' ';
-            else interim += t + ' ';
-        }
-        if (final) {
-            S.broadcastTranslate.postMessage({ en_text: final.trim(), zh_text: '', type: 'final' });
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+
+    recorder.onstop = () => {
+        // 拼接所有分片成完整文件 → 发后端
+        const blob = new Blob(chunks, { type: mimeType || 'audio/webm' });
+        blob.arrayBuffer().then(buf => {
             if (S.ws && S.ws.readyState === WebSocket.OPEN) {
-                S.ws.send(JSON.stringify({ text: final.trim(), type: 'final', target_lang: S.settings.targetLang }));
+                S.ws.send(buf);
             }
-        }
-        if (interim) {
-            S.broadcastTranslate.postMessage({ en_text: interim.trim(), zh_text: '', type: 'interim' });
+        });
+
+        // 继续下一轮录制
+        if (S.isTranslating) {
+            setTimeout(() => startRecordingCycle(), 200);
         }
     };
 
-    rec.onerror = (e) => { if (e.error !== 'no-speech') console.error('识别错误:', e.error); };
-    rec.onend = () => { if (S.isTranslating) { try { rec.start(); } catch {} } };
-    rec.start();
-    S._speechRec = rec;
+    // 每 5 秒停止当前录制，触发 onstop 发送完整文件
+    S._recordingTimer = setTimeout(() => {
+        if (recorder.state === 'recording') recorder.stop();
+    }, 5000);
+
+    recorder.start(1000);  // 1秒分片（用于拼接成完整文件）
+    S._currentRecorder = recorder;
 }
 
-function stopSpeech() {
-    if (S._speechRec) { S._speechRec.stop(); S._speechRec = null; }
+function stopRecording() {
+    if (S._recordingTimer) { clearTimeout(S._recordingTimer); S._recordingTimer = null; }
+    if (S._currentRecorder && S._currentRecorder.state === 'recording') {
+        S._currentRecorder.stop();
+    }
+    S._currentRecorder = null;
 }
 
 // ============================================================
@@ -235,7 +248,7 @@ async function startTranslation() {
 
 function stopTranslation() {
     S.isTranslating = false; S.isPaused = false;
-    stopSpeech();
+    stopRecording();
     disconnectWS();
     closePipWindow();
     updateUI('ready');
