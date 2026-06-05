@@ -3,10 +3,13 @@ AI 同声传译助手 - FastAPI 服务入口
 """
 
 from pathlib import Path
+import json
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 
 from config import config
+from translator import translate_text, add_to_history, get_recent_history
 
 app = FastAPI(title="AI 同声传译助手", version="0.1.0")
 
@@ -34,41 +37,70 @@ async def test_page() -> FileResponse:
     return FileResponse(static_dir / "pip.html")
 
 
+# 缓存上一轮的 interim 翻译（用于自动纠错）
+_interim_translations: dict[str, str] = {}
+
+
 @app.websocket("/ws/translate")
 async def websocket_translate(websocket: WebSocket) -> None:
     """
     翻译 WebSocket 端点
-    接收前端识别的英文文字，返回中文翻译
 
-    消息格式（接收）:
-    {
-        "text": "The quick brown fox",
-        "type": "final" | "interim",
-        "target_lang": "zh"
-    }
+    接收（JSON）:
+    {"text": "The quick brown fox", "type": "final"|"interim", "target_lang": "zh"}
 
-    消息格式（返回）:
-    {
-        "en_text": "The quick brown fox",
-        "zh_text": "敏捷的棕色狐狸",
-        "type": "final" | "interim" | "corrected"
-    }
+    返回（JSON）:
+    {"en_text": "...", "zh_text": "...", "type": "final"|"interim"|"corrected"}
     """
     await websocket.accept()
+
     try:
         while True:
-            data = await websocket.receive_text()
-            # TODO: 接入七牛云 LLM 翻译（PR3）
-            # 目前 echo 原文，PR3 替换为真实翻译
-            import json
+            raw = await websocket.receive_text()
+
             try:
-                msg = json.loads(data)
-                text = msg.get("text", data)
+                msg = json.loads(raw)
+                text = msg.get("text", raw).strip()
+                msg_type = msg.get("type", "final")
+                target_lang = msg.get("target_lang", "zh")
             except json.JSONDecodeError:
-                text = data
-            await websocket.send_text(f"[翻译] {text}")
+                text = raw.strip()
+                msg_type = "final"
+                target_lang = "zh"
+
+            if not text:
+                continue
+
+            # 调用七牛云 LLM 翻译
+            history = get_recent_history()
+            zh_text = await translate_text(
+                text, msg_type=msg_type, target_lang=target_lang,
+                history=history,
+            )
+
+            # 自动纠错：final 翻译与之前 interim 差异时标记为 corrected
+            out_type = msg_type
+            if msg_type == "final":
+                prev = _interim_translations.pop(text[:60], None)
+                if prev and prev != zh_text:
+                    out_type = "corrected"
+
+            # 发送翻译结果
+            await websocket.send_text(json.dumps({
+                "en_text": text,
+                "zh_text": zh_text,
+                "type": out_type,
+            }, ensure_ascii=False))
+
+            # 记录翻译历史
+            if msg_type == "final" and zh_text:
+                add_to_history(text, zh_text)
+
     except WebSocketDisconnect:
         pass
+    finally:
+        # 清理该连接的临时状态
+        _interim_translations.clear()
 
 
 # 静态文件（不使用 app.mount 避免 WebSocket 路由冲突）
