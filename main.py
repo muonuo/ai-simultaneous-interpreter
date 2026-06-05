@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 
 from config import config
 from translator import translate_text, add_to_history, get_recent_history
-from asr import transcribe_audio
+from translator_live import get_translator
 
 app = FastAPI(title="AI 同声传译助手", version="0.1.0")
 
@@ -56,22 +56,39 @@ async def websocket_translate(websocket: WebSocket) -> None:
                 msg_data = raw["text"]
                 try:
                     msg = json.loads(msg_data)
-                    text = msg.get("text", msg_data).strip()
-                    msg_type = msg.get("type", "final")
-                    target_lang = msg.get("target_lang", "zh")
                 except json.JSONDecodeError:
-                    text = msg_data.strip()
-                    msg_type = "final"
-                    target_lang = "zh"
-                if not text:
                     continue
 
-            elif "bytes" in raw:
-                text = await transcribe_audio(raw["bytes"])
+                # 音频消息（base64 PCM）
+                if "audio" in msg:
+                    import base64
+                    try:
+                        pcm_bytes = base64.b64decode(msg["audio"])
+                        translator = get_translator()
+                        translator.send_audio(pcm_bytes)
+                    except Exception as e:
+                        print(f"[audio] decode error: {e}")
+
+                    # 检查翻译结果
+                    results = translator.get_translations()
+                    for r in results:
+                        if isinstance(r, tuple):
+                            _, en_text = r
+                            await websocket.send_text(json.dumps({
+                                "en_text": en_text, "zh_text": "", "type": "final",
+                            }, ensure_ascii=False))
+                        else:
+                            await websocket.send_text(json.dumps({
+                                "en_text": "", "zh_text": r, "type": "final",
+                            }, ensure_ascii=False))
+                    continue
+
+                # 文本翻译消息
+                text = msg.get("text", "").strip()
                 if not text:
                     continue
-                msg_type = "final"
-                target_lang = "zh"
+                msg_type = msg.get("type", "final")
+                target_lang = msg.get("target_lang", "zh")
 
             else:
                 continue
