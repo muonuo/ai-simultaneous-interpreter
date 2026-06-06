@@ -255,22 +255,56 @@ function exportSelected() {
     const history = getHistory();
     const selected = Array.from(checks).map(c => history[parseInt(c.dataset.index)]);
 
-    // 生成 TXT 内容
-    let txt = '=== SimulCast 翻译记录 ===\n\n';
+    // 使用 jsPDF 生成 PDF
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+
+    // 标题
+    doc.setFontSize(20);
+    doc.text('SimulCast Translation Records', 105, 20, { align: 'center' });
+    doc.setFontSize(10);
+    doc.setTextColor(128);
+    doc.text(new Date().toLocaleString('zh-CN'), 105, 28, { align: 'center' });
+
+    let y = 40;
+
     selected.forEach((item, i) => {
-        txt += `[${i + 1}] ${formatTime(item.time)}\n`;
-        if (item.en) txt += `EN: ${item.en}\n`;
-        txt += `ZH: ${item.zh}\n\n`;
+        // 检查是否需要换页
+        if (y > 260) {
+            doc.addPage();
+            y = 20;
+        }
+
+        // 序号和时间
+        doc.setFontSize(11);
+        doc.setTextColor(0);
+        doc.text(`[${i + 1}] ${formatTime(item.time)}`, 15, y);
+        y += 7;
+
+        // 英文
+        if (item.en) {
+            doc.setFontSize(10);
+            doc.setTextColor(100);
+            const enLines = doc.splitTextToSize(`EN: ${item.en}`, 180);
+            doc.text(enLines, 15, y);
+            y += enLines.length * 5;
+        }
+
+        // 中文
+        doc.setFontSize(10);
+        doc.setTextColor(0);
+        const zhLines = doc.splitTextToSize(`ZH: ${item.zh}`, 180);
+        doc.text(zhLines, 15, y);
+        y += zhLines.length * 5 + 8;
+
+        // 分隔线
+        doc.setDrawColor(200);
+        doc.line(15, y, 195, y);
+        y += 8;
     });
 
     // 下载
-    const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `simulcast_${new Date().toISOString().slice(0, 10)}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+    doc.save(`simulcast_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
 // 全选/取消全选
