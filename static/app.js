@@ -2,10 +2,9 @@
  * SimulCast — AI 同声传译助手
  *
  * 核心流程：
- *   标签页音频捕获 → MediaRecorder 编码
- *   → WebSocket 发送音频 → 后端 STT 转写
- *   → 七牛云 LLM 翻译 → BroadcastChannel 广播
- *   → 画中画字幕窗口显示
+ *   用户选择视频标签页 → 视频画面搬到本页 → 字幕叠在视频上
+ *   音频 → Web Audio API PCM16 → WebSocket → LiveTranslate → 字幕
+ *   字幕可拖拽，旧字幕自动淡出
  */
 
 // ============================================================
@@ -13,77 +12,158 @@
 // ============================================================
 const S = {
     isTranslating: false,
-    isPaused: false,
     ws: null,
-    pipWindow: null,
-    mediaRecorder: null,
-    broadcastSettings: new BroadcastChannel('simulcast-settings'),
-    broadcastTranslate: new BroadcastChannel('simulcast-translate'),
-    settings: { fontSize: 'medium', mode: 'bottom', targetLang: 'zh' },
+    _audioCtx: null,
+    _processor: null,
+    _stream: null,
 };
 
 // ============================================================
 // DOM
 // ============================================================
 const D = {
-    mainBtn: document.getElementById('main-btn'),
-    mainBtnIcon: document.querySelector('.main-btn-icon'),
-    mainBtnText: document.querySelector('.main-btn-text'),
-    statusCard: document.getElementById('status-card'),
-    statusTitle: document.getElementById('status-title'),
-    statusDesc: document.getElementById('status-desc'),
-    hint: document.getElementById('hint'),
-    infoDot: document.getElementById('info-dot'),
-    infoText: document.getElementById('info-text'),
-    fontGroup: document.getElementById('font-group'),
-    modeGroup: document.getElementById('mode-group'),
-    langSelect: document.getElementById('lang-select'),
-    fileInput: document.getElementById('file-input'),
+    ctrlBtn:      document.getElementById('ctrl-btn'),
+    ctrlIcon:     document.getElementById('ctrl-icon'),
+    ctrlLabel:    document.getElementById('ctrl-label'),
+    brandDot:     document.getElementById('brand-dot'),
+    statusDot:    document.getElementById('status-dot'),
+    statusText:   document.getElementById('status-text'),
+    guide:        document.getElementById('guide'),
+    videoStage:   document.getElementById('video-stage'),
+    videoPlayer:  document.getElementById('video-player'),
+    overlay:      document.getElementById('subtitle-overlay'),
+    subSource:    document.getElementById('sub-source'),
+    subTarget:    document.getElementById('sub-target'),
+    history:      document.getElementById('subtitle-history'),
 };
 
 // ============================================================
-// 画中画窗口管理
+// 字幕逻辑
 // ============================================================
-async function openPipWindow() {
-    if (S.pipWindow && !S.pipWindow.closed) { S.pipWindow.focus(); return true; }
-    const pipUrl = `${location.origin}/pip`;
+const SEGMENT_GAP_MS = 1500;   // 1.5秒无新内容 → 推入历史
+const FADE_AFTER_MS  = 8000;   // 8秒无活动 → 隐藏
+const MAX_LEN        = 120;    // 中文字符宽，120个足够
+const MAX_HISTORY    = 1;       // 只显示1条历史
+const HISTORY_FADE   = 3000;   // 历史字幕3秒后淡出
 
-    // 方案1: Document Picture-in-Picture
-    if (documentPictureInPicture && documentPictureInPicture.requestWindow) {
-        try {
-            S.pipWindow = await documentPictureInPicture.requestWindow({ width: 640, height: 180 });
-            S.pipWindow.document.body.style.margin = '0';
-            S.pipWindow.document.body.style.overflow = 'hidden';
-            S.pipWindow.document.body.innerHTML = `<iframe src="${pipUrl}" style="width:100vw;height:100vh;border:none;"></iframe>`;
-            S.pipWindow.addEventListener('pagehide', () => { S.pipWindow = null; });
-            S.broadcastSettings.postMessage(S.settings);
-            updateUI('pip');
-            return true;
-        } catch (err) { console.warn('Document PiP 失败:', err.message); }
-    }
+let sourceText = '';
+let targetText = '';
+let segmentTimer = null;
+let fadeTimer    = null;
 
-    // 方案2: window.open
-    try {
-        S.pipWindow = window.open(pipUrl, 'subtitles', `width=680,height=200,top=${screen.height - 280}`);
-        if (S.pipWindow) {
-            S.pipWindow.addEventListener('beforeunload', () => { S.pipWindow = null; });
-            updateUI('pip');
-            return true;
+function handleDelta(lang, text, type) {
+    D.overlay.classList.add('visible');
+    resetTimers();
+
+    if (lang === 'en') {
+        const display = getLastSentence(text);
+        if (type === 'interim') {
+            sourceText = text;
+            D.subSource.textContent = display;
+            D.subSource.classList.add('interim');
+        } else if (type === 'final' || type === 'corrected') {
+            sourceText = text;
+            D.subSource.textContent = display;
+            D.subSource.classList.remove('interim');
         }
-    } catch (err) { console.warn('弹窗被拦截:', err.message); }
-
-    // 方案3: 内联字幕
-    const inline = document.getElementById('inline-subtitles');
-    if (inline) inline.style.display = 'block';
-    updateUI('inline');
-    return true;
+    } else {
+        const display = getLastSentence(text);
+        if (type === 'interim') {
+            targetText = text;
+            D.subTarget.textContent = display;
+            D.subTarget.classList.add('interim');
+            D.subTarget.removeAttribute('data-state');
+        } else if (type === 'final') {
+            targetText = text;
+            D.subTarget.textContent = display;
+            D.subTarget.classList.remove('interim');
+            D.subTarget.removeAttribute('data-state');
+        } else if (type === 'corrected') {
+            targetText = text;
+            D.subTarget.textContent = display;
+            D.subTarget.classList.remove('interim');
+            D.subTarget.removeAttribute('data-state');
+            D.overlay.classList.add('corrected');
+            setTimeout(() => D.overlay.classList.remove('corrected'), 500);
+        }
+    }
 }
 
-function closePipWindow() {
-    if (S.pipWindow && !S.pipWindow.closed) S.pipWindow.close();
-    S.pipWindow = null;
-    const inline = document.getElementById('inline-subtitles');
-    if (inline) inline.style.display = 'none';
+// 只取最后一句（按句号/问号/感叹号分割）
+function getLastSentence(text) {
+    if (!text) return '';
+    // 按中英文句号、问号、感叹号、换行分割
+    const parts = text.split(/[。！？!?\n]+/).filter(s => s.trim());
+    const last = parts.length > 0 ? parts[parts.length - 1].trim() : text.trim();
+    // 限制最大长度
+    if (last.length > MAX_LEN) return '...' + last.slice(last.length - MAX_LEN);
+    return last;
+}
+
+function resetTimers() {
+    if (segmentTimer) clearTimeout(segmentTimer);
+    if (fadeTimer) clearTimeout(fadeTimer);
+
+    // 1.5秒无新内容 → 当前字幕推入历史，清空活跃区
+    segmentTimer = setTimeout(() => {
+        pushToHistory();
+    }, SEGMENT_GAP_MS);
+
+    // 8秒无活动 → 隐藏所有
+    fadeTimer = setTimeout(() => {
+        D.overlay.classList.remove('visible');
+    }, FADE_AFTER_MS);
+}
+
+function pushToHistory() {
+    const en = sourceText.trim();
+    const zh = targetText.trim();
+    if (!en && !zh) return;
+
+    // 创建历史条目
+    const item = document.createElement('div');
+    item.className = 'history-item';
+    if (en) {
+        const d = document.createElement('div');
+        d.className = 'h-en'; d.textContent = en;
+        item.appendChild(d);
+    }
+    if (zh) {
+        const d = document.createElement('div');
+        d.className = 'h-zh'; d.textContent = zh;
+        item.appendChild(d);
+    }
+    D.history.appendChild(item);
+
+    // 超出限制 → 移除最旧的
+    const items = D.history.querySelectorAll('.history-item');
+    if (items.length > MAX_HISTORY) {
+        items[0].remove();
+    }
+
+    // 5秒后淡出
+    setTimeout(() => {
+        item.classList.add('fading');
+        setTimeout(() => { if (item.parentNode) item.remove(); }, 1000);
+    }, HISTORY_FADE);
+
+    // 清空活跃区
+    sourceText = '';
+    targetText = '';
+    D.subSource.textContent = '';
+    D.subTarget.textContent = '';
+    D.subTarget.setAttribute('data-state', 'connecting');
+}
+
+function clearSubtitle() {
+    sourceText = '';
+    targetText = '';
+    D.subSource.textContent = '';
+    D.subTarget.textContent = '';
+    D.overlay.classList.remove('visible');
+    D.history.innerHTML = '';
+    if (segmentTimer) clearTimeout(segmentTimer);
+    if (fadeTimer) clearTimeout(fadeTimer);
 }
 
 // ============================================================
@@ -94,36 +174,33 @@ function connectWS() {
         if (S.ws && S.ws.readyState === WebSocket.OPEN) { resolve(S.ws); return; }
         const proto = location.protocol === 'https:' ? 'wss' : 'ws';
         S.ws = new WebSocket(`${proto}://${location.host}/ws/translate`);
-        // 设置为二进制优先
         S.ws.binaryType = 'arraybuffer';
 
         S.ws.onopen = () => {
-            D.infoDot.classList.add('active');
-            D.infoText.textContent = '翻译中';
+            updateStatus('active', '翻译中');
             resolve(S.ws);
         };
 
         S.ws.onmessage = (event) => {
-            // 接收 JSON 文本 → 广播到字幕窗口
             try {
                 const data = JSON.parse(event.data);
-                S.broadcastTranslate.postMessage(data);
+                if (data.en_text) handleDelta('en', data.en_text, data.type);
+                if (data.zh_text) handleDelta('zh', data.zh_text, data.type);
             } catch {
-                S.broadcastTranslate.postMessage({ zh_text: event.data, type: 'final' });
+                handleDelta('zh', event.data, 'final');
             }
         };
 
         S.ws.onclose = () => {
-            D.infoDot.classList.remove('active');
-            if (S.isTranslating && !S.isPaused) {
-                D.infoText.textContent = '重连中...';
+            updateStatus('', '连接断开');
+            if (S.isTranslating) {
+                updateStatus('', '重连中...');
                 setTimeout(() => connectWS(), 2000);
             }
         };
 
         S.ws.onerror = () => {
-            D.infoDot.classList.add('error');
-            D.infoText.textContent = '连接错误';
+            updateStatus('error', '连接错误');
             reject(new Error('WebSocket 连接失败'));
         };
     });
@@ -131,198 +208,135 @@ function connectWS() {
 
 function disconnectWS() {
     if (S.ws) { S.ws.close(); S.ws = null; }
-    D.infoDot.classList.remove('active', 'error');
-    D.infoText.textContent = '就绪';
 }
 
 // ============================================================
-// 标签页音频 → MediaRecorder → base64 → WebSocket → LiveTranslate
+// 音频 + 视频捕获
 // ============================================================
-async function startAudioCapture() {
+async function startCapture() {
     try {
         const stream = await navigator.mediaDevices.getDisplayMedia({
             video: true,
             audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
         });
-        stream.getVideoTracks().forEach(t => t.stop());
+
         const audioTrack = stream.getAudioTracks()[0];
-        if (!audioTrack) throw new Error('未检测到音频轨道');
-        audioTrack.addEventListener('ended', () => { if (S.isTranslating) stopTranslation(); });
-
-        const audioStream = new MediaStream([audioTrack]);
-        let mimeType = '';
-        for (const mt of ['audio/webm;codecs=opus', 'audio/webm']) {
-            if (MediaRecorder.isTypeSupported(mt)) { mimeType = mt; break; }
+        if (!audioTrack) {
+            stream.getTracks().forEach(t => t.stop());
+            throw new Error('未检测到音频轨道，请选择有音频的标签页');
         }
-        S._recorder = new MediaRecorder(audioStream, mimeType ? { mimeType } : {});
 
-        S._recorder.ondataavailable = (e) => {
-            if (e.data.size < 100 || !S.ws || S.ws.readyState !== WebSocket.OPEN) return;
-            const reader = new FileReader();
-            reader.onload = () => {
-                const b64 = reader.result.split(',')[1];
-                if (b64) S.ws.send(JSON.stringify({ audio: b64 }));
-            };
-            reader.readAsDataURL(e.data);
+        audioTrack.addEventListener('ended', () => {
+            if (S.isTranslating) stopTranslation();
+        });
+
+        // 显示视频画面（静音）
+        D.videoPlayer.srcObject = stream;
+        D.videoPlayer.muted = true;
+        D.videoStage.classList.add('visible');
+        D.guide.classList.add('hidden');
+        S._stream = stream;
+
+        // 音频处理：PCM16 → WebSocket
+        const audioStream = new MediaStream([audioTrack]);
+        const audioCtx = new AudioContext({ sampleRate: 16000 });
+        const source = audioCtx.createMediaStreamSource(audioStream);
+        const processor = audioCtx.createScriptProcessor(2048, 1, 1);
+
+        processor.onaudioprocess = (e) => {
+            if (!S.ws || S.ws.readyState !== WebSocket.OPEN) return;
+            const float32 = e.inputBuffer.getChannelData(0);
+            const int16 = new Int16Array(float32.length);
+            for (let i = 0; i < float32.length; i++) {
+                const s = Math.max(-1, Math.min(1, float32[i]));
+                int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            }
+            const bytes = new Uint8Array(int16.buffer);
+            let binary = '';
+            for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+            S.ws.send(JSON.stringify({ audio: btoa(binary) }));
         };
-        S._recorder.start(1000);  // 1秒分片
-        return stream;
+
+        source.connect(processor);
+        processor.connect(audioCtx.destination);
+
+        S._audioCtx = audioCtx;
+        S._processor = processor;
+
+        return true;
     } catch (err) {
-        if (err.name === 'AbortError') return null;
-        alert('音频捕获失败: ' + err.message);
-        return null;
+        if (err.name === 'AbortError') return false;
+        alert('捕获失败: ' + err.message);
+        return false;
     }
 }
 
-function stopRecording() {
-    if (S._recorder && S._recorder.state === 'recording') { S._recorder.stop(); S._recorder = null; }
-}
-
-// ============================================================
-// 本地文件模式
-// ============================================================
-async function startFileMode(file) {
-    const url = URL.createObjectURL(file);
-    const isAudio = file.type.startsWith('audio/');
-    const media = document.createElement(isAudio ? 'audio' : 'video');
-    media.src = url; media.controls = false; media.muted = false;
-    media.style.display = 'none';
-    document.body.appendChild(media);
-    await media.play();
-
-    const stream = media.captureStream ? media.captureStream() : media.mozCaptureStream ? media.mozCaptureStream() : null;
-    if (!stream) { alert('无法从文件中捕获音频流'); return; }
-
-    S.mediaRecorder = new MediaRecorder(stream);
-    S.mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0 && S.ws && S.ws.readyState === WebSocket.OPEN) {
-            S.ws.send(event.data);
-        }
-    };
-    S.mediaRecorder.start(1500);
-
-    media.addEventListener('ended', () => { if (S.isTranslating) stopTranslation(); });
-    return stream;
+function stopCapture() {
+    if (S._processor) { S._processor.disconnect(); S._processor = null; }
+    if (S._audioCtx) { S._audioCtx.close(); S._audioCtx = null; }
+    if (S._stream) {
+        S._stream.getTracks().forEach(t => t.stop());
+        S._stream = null;
+    }
+    D.videoPlayer.srcObject = null;
+    D.videoStage.classList.remove('visible');
+    D.guide.classList.remove('hidden');
 }
 
 // ============================================================
 // 翻译控制
 // ============================================================
 async function startTranslation() {
-    const pipOk = await openPipWindow();
-    if (!pipOk) return;
-
     try { await connectWS(); }
-    catch { closePipWindow(); return; }
+    catch { return; }
 
-    const stream = await startAudioCapture();
-    if (!stream) { disconnectWS(); closePipWindow(); return; }
+    const ok = await startCapture();
+    if (!ok) { disconnectWS(); return; }
 
-    S.isTranslating = true; S.isPaused = false;
-    updateUI('translating');
+    D.subTarget.setAttribute('data-state', 'connecting');
+    D.overlay.classList.add('visible');
+
+    S.isTranslating = true;
+    D.ctrlBtn.classList.add('recording');
+    D.ctrlIcon.textContent = '■';
+    D.ctrlLabel.textContent = '停止';
+    D.brandDot.classList.add('active');
 }
 
 function stopTranslation() {
-    S.isTranslating = false; S.isPaused = false;
-    stopRecording();
+    S.isTranslating = false;
+    stopCapture();
     disconnectWS();
-    closePipWindow();
-    updateUI('ready');
+    clearSubtitle();
+
+    D.ctrlBtn.classList.remove('recording');
+    D.ctrlIcon.textContent = '▶';
+    D.ctrlLabel.textContent = '开始翻译';
+    D.brandDot.classList.remove('active');
+    updateStatus('', '就绪');
 }
 
 // ============================================================
-// UI 更新
+// UI 辅助
 // ============================================================
-function updateUI(state) {
-    if (state === 'ready') {
-        D.mainBtn.classList.remove('translating');
-        D.mainBtnIcon.innerHTML = '&#9654;';
-        D.mainBtnText.textContent = '开始翻译';
-        D.statusCard.classList.remove('translating');
-        D.statusTitle.textContent = '准备开始';
-        D.statusDesc.textContent = '在任何网站观看英文视频时，打开本页面并点击下方按钮。选择视频所在的浏览器标签页，实时字幕将以浮动窗口形式显示在屏幕上方。';
-        D.hint.textContent = '选择正在播放视频的浏览器标签页';
-        D.hint.classList.remove('active');
-        D.infoDot.classList.remove('active', 'error');
-        D.infoText.textContent = '就绪';
-    } else if (state === 'pip') {
-        D.statusCard.classList.add('translating');
-        D.statusTitle.textContent = '字幕窗口已打开';
-        D.hint.classList.add('active');
-    } else if (state === 'inline') {
-        D.statusCard.classList.add('translating');
-        D.statusTitle.textContent = '字幕窗口已打开（内联模式）';
-    } else if (state === 'translating') {
-        D.mainBtn.classList.add('translating');
-        D.mainBtnIcon.innerHTML = '&#9632;';
-        D.mainBtnText.textContent = '停止';
-        D.statusCard.classList.add('translating');
-        D.statusTitle.textContent = '翻译中';
-        D.statusDesc.textContent = '正在实时捕获音频并翻译。字幕在浮动窗口中显示。';
-        D.hint.textContent = '● 翻译进行中...';
-        D.hint.classList.add('active');
-        D.infoDot.classList.add('active');
-        D.infoText.textContent = '翻译中';
-    }
+function updateStatus(dotClass, text) {
+    D.statusDot.className = 'status-dot' + (dotClass ? ' ' + dotClass : '');
+    D.statusText.textContent = text;
 }
 
 // ============================================================
 // 事件绑定
 // ============================================================
-D.mainBtn.addEventListener('click', () => {
+D.ctrlBtn.addEventListener('click', () => {
     S.isTranslating ? stopTranslation() : startTranslation();
 });
 
-D.fontGroup.addEventListener('click', (e) => {
-    if (!e.target.classList.contains('toggle-btn')) return;
-    D.fontGroup.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
-    e.target.classList.add('active');
-    S.settings.fontSize = e.target.dataset.font;
-    S.broadcastSettings.postMessage({ fontSize: S.settings.fontSize });
-});
-
-D.modeGroup.addEventListener('click', (e) => {
-    if (!e.target.classList.contains('toggle-btn')) return;
-    D.modeGroup.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
-    e.target.classList.add('active');
-    S.settings.mode = e.target.dataset.mode;
-    S.broadcastSettings.postMessage({ mode: S.settings.mode });
-});
-
-D.langSelect.addEventListener('change', () => {
-    S.settings.targetLang = D.langSelect.value;
-});
-
-D.fileInput.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const pipOk = await openPipWindow();
-    if (!pipOk) return;
-    try { await connectWS(); } catch { closePipWindow(); return; }
-    const stream = await startFileMode(file);
-    if (!stream) { disconnectWS(); closePipWindow(); return; }
-    S.isTranslating = true;
-    updateUI('translating');
-});
-
-// 监听翻译消息同步到内联字幕
-S.broadcastTranslate.addEventListener('message', (e) => {
-    const { en_text, zh_text, type } = e.data;
-    const inlineEn = document.getElementById('inline-en');
-    const inlineZh = document.getElementById('inline-zh');
-    if (!inlineEn || !inlineZh) return;
-    if (en_text) { inlineEn.textContent = en_text; inlineEn.style.opacity = type === 'interim' ? '0.5' : '1'; }
-    if (zh_text) { inlineZh.textContent = zh_text; inlineZh.style.opacity = type === 'interim' ? '0.5' : '1'; }
-});
-
 document.addEventListener('keydown', (e) => {
-    if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); D.mainBtn.click(); }
+    if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); D.ctrlBtn.click(); }
 });
 
 window.addEventListener('beforeunload', () => {
     if (S.isTranslating) stopTranslation();
-    S.broadcastSettings.close();
-    S.broadcastTranslate.close();
 });
 
-console.log('SimulCast 控制面板已就绪 | 音频→后端STT→翻译→字幕');
+console.log('SimulCast 已就绪 | 视频搬运 + 字幕一体化 + 可拖拽');
