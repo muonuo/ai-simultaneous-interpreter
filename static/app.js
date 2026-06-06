@@ -248,42 +248,149 @@ function formatTime(ts) {
 function exportSelected() {
     const checks = document.querySelectorAll('.history-check:checked');
     if (checks.length === 0) {
-        alert('请先选择要导出的记录');
+        showToast('请先勾选要导出的历史记录', 'warning');
         return;
     }
-
     const history = getHistory();
     const selected = Array.from(checks).map(c => history[parseInt(c.dataset.index)]);
+    showExportDialog(selected);
+}
 
-    // 创建隐藏的渲染容器
-    const container = document.createElement('div');
-    container.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;padding:40px;background:white;font-family:"Noto Sans SC","Microsoft YaHei",sans-serif;color:#333;';
-    container.innerHTML = `
-        <h1 style="text-align:center;font-size:24px;margin-bottom:5px;">SimulCast 翻译记录</h1>
-        <p style="text-align:center;font-size:12px;color:#888;margin-bottom:30px;">${new Date().toLocaleString('zh-CN')}</p>
+function showExportDialog(items) {
+    const existing = document.querySelector('.export-dialog');
+    if (existing) existing.remove();
+    const dialog = document.createElement('div');
+    dialog.className = 'export-dialog';
+    dialog.innerHTML = `
+        <div class="export-dialog-backdrop"></div>
+        <div class="export-dialog-content">
+            <div class="export-dialog-header">
+                <span>选择导出格式</span>
+                <button class="export-dialog-close">&times;</button>
+            </div>
+            <div class="export-format-options">
+                <button class="export-format-btn" data-format="pdf">
+                    <span class="export-format-icon">📄</span>
+                    <span class="export-format-label">PDF</span>
+                    <span class="export-format-desc">适合打印和分享</span>
+                </button>
+                <button class="export-format-btn" data-format="word">
+                    <span class="export-format-icon">📝</span>
+                    <span class="export-format-label">Word</span>
+                    <span class="export-format-desc">可编辑文档</span>
+                </button>
+                <button class="export-format-btn" data-format="txt">
+                    <span class="export-format-icon">📋</span>
+                    <span class="export-format-label">TXT</span>
+                    <span class="export-format-desc">纯文本格式</span>
+                </button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(dialog);
+    requestAnimationFrame(() => dialog.classList.add('show'));
+
+    dialog.querySelector('.export-dialog-close').addEventListener('click', () => dialog.remove());
+    dialog.querySelector('.export-dialog-backdrop').addEventListener('click', () => dialog.remove());
+    dialog.querySelectorAll('.export-format-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const format = btn.dataset.format;
+            dialog.remove();
+            switch(format) {
+                case 'pdf': exportAsPdf(items); break;
+                case 'word': exportAsWord(items); break;
+                case 'txt': exportAsTxt(items); break;
+            }
+        });
+    });
+}
+
+function getExportHtml(selected) {
+    return `
+        <h1 style="text-align:center;font-size:24px;font-weight:700;color:#2563eb;margin:0 0 8px;">SimulCast 翻译记录</h1>
+        <p style="text-align:center;font-size:13px;color:#999;margin-bottom:30px;">导出时间：${new Date().toLocaleString('zh-CN')}</p>
         ${selected.map((item, i) => `
-            <div style="margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid #eee;">
-                <p style="font-size:13px;font-weight:bold;margin-bottom:8px;">[${i + 1}] ${formatTime(item.time)}</p>
-                ${item.en ? `<p style="font-size:12px;color:#666;margin:5px 0;">EN: ${escapeHtml(item.en)}</p>` : ''}
-                <p style="font-size:14px;margin:5px 0;">ZH: ${escapeHtml(item.zh)}</p>
+            <div style="margin-bottom:20px;padding:16px;border:1px solid #e0e0e0;border-radius:8px;">
+                <p style="font-size:12px;color:#999;margin-bottom:8px;">[${i + 1}] ${formatTime(item.time)}</p>
+                ${item.en ? `<p style="font-size:14px;color:#666;line-height:1.8;margin-bottom:6px;">${escapeHtml(item.en)}</p>` : ''}
+                <p style="font-size:16px;color:#1a1a2e;line-height:1.8;font-weight:500;">${escapeHtml(item.zh)}</p>
             </div>
         `).join('')}
     `;
-    document.body.appendChild(container);
+}
 
-    // 使用 html2canvas 渲染
+function exportAsPdf(selected) {
+    const container = document.createElement('div');
+    container.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;padding:40px;background:white;font-family:"Noto Sans SC","Microsoft YaHei",sans-serif;color:#333;';
+    container.innerHTML = getExportHtml(selected);
+    document.body.appendChild(container);
     html2canvas(container, { scale: 2, useCORS: true }).then(canvas => {
         document.body.removeChild(container);
-
         const { jsPDF } = window.jspdf;
         const pdf = new jsPDF('p', 'mm', 'a4');
         const imgData = canvas.toDataURL('image/png');
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+        let heightLeft = pdfHeight;
+        let position = 0;
+        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+        heightLeft -= pdf.internal.pageSize.getHeight();
+        while (heightLeft > 0) {
+            position = heightLeft - pdfHeight;
+            pdf.addPage();
+            pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+            heightLeft -= pdf.internal.pageSize.getHeight();
+        }
         pdf.save(`simulcast_${new Date().toISOString().slice(0, 10)}.pdf`);
     });
+}
+
+function exportAsWord(selected) {
+    const html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head><meta charset="utf-8"><title>SimulCast</title>
+<style>
+body{font-family:"Microsoft YaHei",sans-serif;color:#333;padding:40px;}
+h1{font-size:24px;font-weight:700;color:#2563eb;text-align:center;margin:0 0 8px;}
+.meta{font-size:13px;color:#999;text-align:center;margin-bottom:30px;}
+.record{margin-bottom:20px;padding:16px;border:1px solid #e0e0e0;border-radius:8px;}
+.time{font-size:12px;color:#999;margin-bottom:8px;}
+.en{font-size:14px;color:#666;line-height:1.8;margin-bottom:6px;}
+.zh{font-size:16px;color:#1a1a2e;line-height:1.8;font-weight:500;}
+</style></head><body>
+<h1>SimulCast 翻译记录</h1>
+<p class="meta">导出时间：${new Date().toLocaleString('zh-CN')}</p>
+${selected.map((item, i) => `
+<div class="record">
+    <p class="time">[${i + 1}] ${formatTime(item.time)}</p>
+    ${item.en ? `<p class="en">${escapeHtml(item.en)}</p>` : ''}
+    <p class="zh">${escapeHtml(item.zh)}</p>
+</div>`).join('')}
+</body></html>`;
+    const blob = new Blob(['﻿' + html], { type: 'application/msword' });
+    downloadBlob(blob, `simulcast_${new Date().toISOString().slice(0, 10)}.doc`);
+}
+
+function exportAsTxt(selected) {
+    let text = 'SimulCast 翻译记录\n';
+    text += '导出时间：' + new Date().toLocaleString('zh-CN') + '\n';
+    text += '═'.repeat(40) + '\n\n';
+    selected.forEach((item, i) => {
+        text += `[${i + 1}] ${formatTime(item.time)}\n`;
+        if (item.en) text += `EN: ${item.en}\n`;
+        text += `ZH: ${item.zh}\n`;
+        text += '\n' + '─'.repeat(30) + '\n\n';
+    });
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    downloadBlob(blob, `simulcast_${new Date().toISOString().slice(0, 10)}.txt`);
+}
+
+function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
 }
 
 // 全选/取消全选
