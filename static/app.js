@@ -464,9 +464,11 @@ async function startTranslation() {
 }
 
 function stopTranslation() {
-    // 保存会话为历史记录
-    if (sessionZh.length > 0) {
-        saveToHistory(sessionEn.join(' '), sessionZh.join('。'));
+    // 保存会话为历史记录（包括当前正在翻译的句子）
+    const enToSave = sessionEn.join(' ') || currentEn;
+    const zhToSave = sessionZh.join('。') || currentZh;
+    if (zhToSave) {
+        saveToHistory(enToSave, zhToSave);
     }
 
     S.isTranslating = false;
