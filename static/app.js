@@ -34,55 +34,28 @@ const D = {
     overlay:      document.getElementById('subtitle-overlay'),
     subSource:    document.getElementById('sub-source'),
     subTarget:    document.getElementById('sub-target'),
-    history:      document.getElementById('subtitle-history'),
 };
 
 // ============================================================
 // 字幕逻辑
 // ============================================================
-const SEGMENT_GAP_MS = 1500;   // 1.5秒无新内容 → 推入历史
-const FADE_AFTER_MS  = 8000;   // 8秒无活动 → 隐藏
-const MAX_LEN        = 120;    // 中文字符宽，120个足够
-const MAX_HISTORY    = 1;       // 只显示1条历史
-const HISTORY_FADE   = 3000;   // 历史字幕3秒后淡出
+const FADE_AFTER_MS = 5000;   // 5秒无活动 → 隐藏
+const MAX_LEN       = 120;    // 中文字符宽，120个足够
 
-let sourceText = '';
-let targetText = '';
-let segmentTimer = null;
-let fadeTimer    = null;
+let fadeTimer = null;
 
-function handleDelta(lang, text, type) {
+function handleDelta(text, type) {
     D.overlay.classList.add('visible');
     resetTimers();
 
-    if (lang === 'en') {
-        const display = getLastSentence(text);
-        if (type === 'interim') {
-            sourceText = text;
-            D.subSource.textContent = display;
-            D.subSource.classList.add('interim');
-        } else if (type === 'final' || type === 'corrected') {
-            sourceText = text;
-            D.subSource.textContent = display;
-            D.subSource.classList.remove('interim');
-        }
+    const display = getLastSentence(text);
+    D.subTarget.textContent = display;
+
+    if (type === 'interim') {
+        D.subTarget.classList.add('interim');
     } else {
-        const display = getLastSentence(text);
-        if (type === 'interim') {
-            targetText = text;
-            D.subTarget.textContent = display;
-            D.subTarget.classList.add('interim');
-            D.subTarget.removeAttribute('data-state');
-        } else if (type === 'final') {
-            targetText = text;
-            D.subTarget.textContent = display;
-            D.subTarget.classList.remove('interim');
-            D.subTarget.removeAttribute('data-state');
-        } else if (type === 'corrected') {
-            targetText = text;
-            D.subTarget.textContent = display;
-            D.subTarget.classList.remove('interim');
-            D.subTarget.removeAttribute('data-state');
+        D.subTarget.classList.remove('interim');
+        if (type === 'corrected') {
             D.overlay.classList.add('corrected');
             setTimeout(() => D.overlay.classList.remove('corrected'), 500);
         }
@@ -92,77 +65,24 @@ function handleDelta(lang, text, type) {
 // 只取最后一句（按句号/问号/感叹号分割）
 function getLastSentence(text) {
     if (!text) return '';
-    // 按中英文句号、问号、感叹号、换行分割
     const parts = text.split(/[。！？!?\n]+/).filter(s => s.trim());
     const last = parts.length > 0 ? parts[parts.length - 1].trim() : text.trim();
-    // 限制最大长度
     if (last.length > MAX_LEN) return '...' + last.slice(last.length - MAX_LEN);
     return last;
 }
 
 function resetTimers() {
-    if (segmentTimer) clearTimeout(segmentTimer);
     if (fadeTimer) clearTimeout(fadeTimer);
-
-    // 1.5秒无新内容 → 当前字幕推入历史，清空活跃区
-    segmentTimer = setTimeout(() => {
-        pushToHistory();
-    }, SEGMENT_GAP_MS);
-
-    // 8秒无活动 → 隐藏所有
+    // 5秒无活动 → 隐藏字幕
     fadeTimer = setTimeout(() => {
         D.overlay.classList.remove('visible');
+        D.subTarget.textContent = '';
     }, FADE_AFTER_MS);
 }
 
-function pushToHistory() {
-    const en = sourceText.trim();
-    const zh = targetText.trim();
-    if (!en && !zh) return;
-
-    // 创建历史条目
-    const item = document.createElement('div');
-    item.className = 'history-item';
-    if (en) {
-        const d = document.createElement('div');
-        d.className = 'h-en'; d.textContent = en;
-        item.appendChild(d);
-    }
-    if (zh) {
-        const d = document.createElement('div');
-        d.className = 'h-zh'; d.textContent = zh;
-        item.appendChild(d);
-    }
-    D.history.appendChild(item);
-
-    // 超出限制 → 移除最旧的
-    const items = D.history.querySelectorAll('.history-item');
-    if (items.length > MAX_HISTORY) {
-        items[0].remove();
-    }
-
-    // 5秒后淡出
-    setTimeout(() => {
-        item.classList.add('fading');
-        setTimeout(() => { if (item.parentNode) item.remove(); }, 1000);
-    }, HISTORY_FADE);
-
-    // 清空活跃区
-    sourceText = '';
-    targetText = '';
-    D.subSource.textContent = '';
-    D.subTarget.textContent = '';
-    D.subTarget.setAttribute('data-state', 'connecting');
-}
-
 function clearSubtitle() {
-    sourceText = '';
-    targetText = '';
-    D.subSource.textContent = '';
     D.subTarget.textContent = '';
     D.overlay.classList.remove('visible');
-    D.history.innerHTML = '';
-    if (segmentTimer) clearTimeout(segmentTimer);
     if (fadeTimer) clearTimeout(fadeTimer);
 }
 
@@ -184,10 +104,9 @@ function connectWS() {
         S.ws.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
-                if (data.en_text) handleDelta('en', data.en_text, data.type);
-                if (data.zh_text) handleDelta('zh', data.zh_text, data.type);
+                if (data.zh_text) handleDelta(data.zh_text, data.type);
             } catch {
-                handleDelta('zh', event.data, 'final');
+                handleDelta(event.data, 'final');
             }
         };
 
@@ -241,7 +160,7 @@ async function startCapture() {
         const audioStream = new MediaStream([audioTrack]);
         const audioCtx = new AudioContext({ sampleRate: 16000 });
         const source = audioCtx.createMediaStreamSource(audioStream);
-        const processor = audioCtx.createScriptProcessor(2048, 1, 1);
+        const processor = audioCtx.createScriptProcessor(1024, 1, 1);
 
         processor.onaudioprocess = (e) => {
             if (!S.ws || S.ws.readyState !== WebSocket.OPEN) return;
