@@ -48,6 +48,8 @@ const MAX_HISTORY   = 100;    // 最多保存100条历史
 let fadeTimer = null;
 let currentEn = '';  // 当前英文句子
 let currentZh = '';  // 当前中文句子
+let sessionEn = [];  // 整个会话的英文句子
+let sessionZh = [];  // 整个会话的中文句子
 
 function handleDelta(enText, zhText, type) {
     D.overlay.classList.add('visible');
@@ -69,9 +71,13 @@ function handleDelta(enText, zhText, type) {
             D.overlay.classList.add('corrected');
             setTimeout(() => D.overlay.classList.remove('corrected'), 500);
         }
-        // final 时保存历史记录
+        // final 时累积到会话记录
         if (type === 'final' && currentZh) {
-            saveToHistory(currentEn, currentZh);
+            // 避免重复
+            if (sessionZh.length === 0 || sessionZh[sessionZh.length - 1] !== currentZh) {
+                sessionEn.push(currentEn);
+                sessionZh.push(currentZh);
+            }
         }
     }
 }
@@ -109,6 +115,8 @@ function clearSubtitle() {
     if (fadeTimer) clearTimeout(fadeTimer);
     currentEn = '';
     currentZh = '';
+    sessionEn = [];
+    sessionZh = [];
 }
 
 // ============================================================
@@ -359,9 +367,11 @@ async function startTranslation() {
 }
 
 function stopTranslation() {
-    // 停止前保存当前句子到历史记录
-    if (currentZh) {
-        saveToHistory(currentEn, currentZh);
+    // 停止时保存整个会话为一条记录
+    if (sessionZh.length > 0) {
+        const fullEn = sessionEn.join(' ');
+        const fullZh = sessionZh.join('。');
+        saveToHistory(fullEn, fullZh);
     }
 
     S.isTranslating = false;
