@@ -255,42 +255,45 @@ function exportSelected() {
     const history = getHistory();
     const selected = Array.from(checks).map(c => history[parseInt(c.dataset.index)]);
 
-    // 构建 HTML 内容
+    // 构建打印内容
     let html = `
-        <div style="font-family: 'Noto Sans SC', 'Microsoft YaHei', sans-serif; padding: 20px; color: #333;">
-            <h1 style="text-align: center; font-size: 22px; margin-bottom: 5px;">SimulCast 翻译记录</h1>
-            <p style="text-align: center; font-size: 12px; color: #888; margin-bottom: 20px;">${new Date().toLocaleString('zh-CN')}</p>
+        <html>
+        <head>
+            <title>SimulCast 翻译记录</title>
+            <style>
+                body { font-family: 'Noto Sans SC', 'Microsoft YaHei', sans-serif; padding: 40px; color: #333; }
+                h1 { text-align: center; font-size: 24px; margin-bottom: 5px; }
+                .date { text-align: center; font-size: 12px; color: #888; margin-bottom: 30px; }
+                .record { margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #eee; }
+                .time { font-size: 13px; font-weight: bold; margin-bottom: 8px; }
+                .en { font-size: 12px; color: #666; margin: 5px 0; }
+                .zh { font-size: 14px; margin: 5px 0; }
+            </style>
+        </head>
+        <body>
+            <h1>SimulCast 翻译记录</h1>
+            <p class="date">${new Date().toLocaleString('zh-CN')}</p>
     `;
 
     selected.forEach((item, i) => {
         html += `
-            <div style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #eee;">
-                <p style="font-size: 13px; font-weight: bold; margin-bottom: 5px;">[${i + 1}] ${formatTime(item.time)}</p>
-                ${item.en ? `<p style="font-size: 12px; color: #666; margin: 5px 0;">EN: ${escapeHtml(item.en)}</p>` : ''}
-                <p style="font-size: 14px; margin: 5px 0;">ZH: ${escapeHtml(item.zh)}</p>
+            <div class="record">
+                <p class="time">[${i + 1}] ${formatTime(item.time)}</p>
+                ${item.en ? `<p class="en">EN: ${escapeHtml(item.en)}</p>` : ''}
+                <p class="zh">ZH: ${escapeHtml(item.zh)}</p>
             </div>
         `;
     });
 
-    html += '</div>';
+    html += '</body></html>';
 
-    // 创建临时元素
-    const element = document.createElement('div');
-    element.innerHTML = html;
-    document.body.appendChild(element);
-
-    // 使用 html2pdf 生成 PDF
-    const opt = {
-        margin: 10,
-        filename: `simulcast_${new Date().toISOString().slice(0, 10)}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2 },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    // 打开新窗口并打印
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.onload = () => {
+        printWindow.print();
     };
-
-    html2pdf().set(opt).from(element).save().then(() => {
-        document.body.removeChild(element);
-    });
 }
 
 // 全选/取消全选
