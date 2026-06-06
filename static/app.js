@@ -255,56 +255,42 @@ function exportSelected() {
     const history = getHistory();
     const selected = Array.from(checks).map(c => history[parseInt(c.dataset.index)]);
 
-    // 使用 jsPDF 生成 PDF
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-
-    // 标题
-    doc.setFontSize(20);
-    doc.text('SimulCast Translation Records', 105, 20, { align: 'center' });
-    doc.setFontSize(10);
-    doc.setTextColor(128);
-    doc.text(new Date().toLocaleString('zh-CN'), 105, 28, { align: 'center' });
-
-    let y = 40;
+    // 构建 HTML 内容
+    let html = `
+        <div style="font-family: 'Noto Sans SC', 'Microsoft YaHei', sans-serif; padding: 20px; color: #333;">
+            <h1 style="text-align: center; font-size: 22px; margin-bottom: 5px;">SimulCast 翻译记录</h1>
+            <p style="text-align: center; font-size: 12px; color: #888; margin-bottom: 20px;">${new Date().toLocaleString('zh-CN')}</p>
+    `;
 
     selected.forEach((item, i) => {
-        // 检查是否需要换页
-        if (y > 260) {
-            doc.addPage();
-            y = 20;
-        }
-
-        // 序号和时间
-        doc.setFontSize(11);
-        doc.setTextColor(0);
-        doc.text(`[${i + 1}] ${formatTime(item.time)}`, 15, y);
-        y += 7;
-
-        // 英文
-        if (item.en) {
-            doc.setFontSize(10);
-            doc.setTextColor(100);
-            const enLines = doc.splitTextToSize(`EN: ${item.en}`, 180);
-            doc.text(enLines, 15, y);
-            y += enLines.length * 5;
-        }
-
-        // 中文
-        doc.setFontSize(10);
-        doc.setTextColor(0);
-        const zhLines = doc.splitTextToSize(`ZH: ${item.zh}`, 180);
-        doc.text(zhLines, 15, y);
-        y += zhLines.length * 5 + 8;
-
-        // 分隔线
-        doc.setDrawColor(200);
-        doc.line(15, y, 195, y);
-        y += 8;
+        html += `
+            <div style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #eee;">
+                <p style="font-size: 13px; font-weight: bold; margin-bottom: 5px;">[${i + 1}] ${formatTime(item.time)}</p>
+                ${item.en ? `<p style="font-size: 12px; color: #666; margin: 5px 0;">EN: ${escapeHtml(item.en)}</p>` : ''}
+                <p style="font-size: 14px; margin: 5px 0;">ZH: ${escapeHtml(item.zh)}</p>
+            </div>
+        `;
     });
 
-    // 下载
-    doc.save(`simulcast_${new Date().toISOString().slice(0, 10)}.pdf`);
+    html += '</div>';
+
+    // 创建临时元素
+    const element = document.createElement('div');
+    element.innerHTML = html;
+    document.body.appendChild(element);
+
+    // 使用 html2pdf 生成 PDF
+    const opt = {
+        margin: 10,
+        filename: `simulcast_${new Date().toISOString().slice(0, 10)}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+
+    html2pdf().set(opt).from(element).save().then(() => {
+        document.body.removeChild(element);
+    });
 }
 
 // 全选/取消全选
