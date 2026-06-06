@@ -611,4 +611,94 @@ if (sourceLangSelect) {
     });
 }
 
+// ============================================================
+// 背景动画 —— 音波 + 粒子
+// ============================================================
+(function initBackgroundAnimations() {
+    // ---- 音波动画 ----
+    const waveCanvas = document.getElementById('wave-canvas');
+    if (waveCanvas) {
+        const ctx = waveCanvas.getContext('2d');
+        let w, h;
+        const waves = [
+            { amp: 30, freq: 0.008, speed: 0.015, color: '#4f8fff' },
+            { amp: 20, freq: 0.012, speed: 0.02, color: '#7c3aed' },
+            { amp: 25, freq: 0.006, speed: 0.01, color: '#06b6d4' },
+        ];
+        let offset = 0;
+
+        function resizeWave() {
+            w = waveCanvas.width = window.innerWidth;
+            h = waveCanvas.height = window.innerHeight;
+        }
+        resizeWave();
+        window.addEventListener('resize', resizeWave);
+
+        function drawWave() {
+            ctx.clearRect(0, 0, w, h);
+            waves.forEach(wave => {
+                ctx.beginPath();
+                ctx.moveTo(0, h / 2);
+                for (let x = 0; x <= w; x += 2) {
+                    const y = h / 2 + Math.sin(x * wave.freq + offset * wave.speed) * wave.amp
+                            + Math.sin(x * wave.freq * 0.5 + offset * wave.speed * 0.7) * wave.amp * 0.5;
+                    ctx.lineTo(x, y);
+                }
+                ctx.strokeStyle = wave.color;
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            });
+            offset++;
+            requestAnimationFrame(drawWave);
+        }
+        drawWave();
+    }
+
+    // ---- 粒子动画 ----
+    const particleCanvas = document.getElementById('particle-canvas');
+    if (particleCanvas) {
+        const ctx = particleCanvas.getContext('2d');
+        let w, h;
+        const particles = [];
+        const PARTICLE_COUNT = 60;
+
+        function resizeParticle() {
+            w = particleCanvas.width = window.innerWidth;
+            h = particleCanvas.height = window.innerHeight;
+        }
+        resizeParticle();
+        window.addEventListener('resize', resizeParticle);
+
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+            particles.push({
+                x: Math.random() * window.innerWidth,
+                y: Math.random() * window.innerHeight,
+                r: Math.random() * 1.5 + 0.5,
+                dx: (Math.random() - 0.5) * 0.3,
+                dy: (Math.random() - 0.5) * 0.3,
+                opacity: Math.random() * 0.5 + 0.2,
+            });
+        }
+
+        function drawParticles() {
+            ctx.clearRect(0, 0, w, h);
+            particles.forEach(p => {
+                p.x += p.dx;
+                p.y += p.dy;
+                if (p.x < 0) p.x = w;
+                if (p.x > w) p.x = 0;
+                if (p.y < 0) p.y = h;
+                if (p.y > h) p.y = 0;
+
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(79, 143, 255, ${p.opacity})`;
+                ctx.fill();
+            });
+            requestAnimationFrame(drawParticles);
+        }
+        drawParticles();
+    }
+})();
+
 console.log('SimulCast 已就绪 | 视频搬运 + 字幕一体化 + 多语言支持');

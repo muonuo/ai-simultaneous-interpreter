@@ -26,16 +26,93 @@
 html, body {
     height: 100%;
     font-family: var(--font);
-    background: var(--bg);
+    background: #050816;
     color: var(--text);
     -webkit-font-smoothing: antialiased;
     overflow: hidden;
+    position: relative;
+}
+
+/* ========== 极光背景 ========== */
+
+.aurora-bg {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.aurora-blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(120px);
+    opacity: 0.18;
+    animation: aurora-drift 20s ease-in-out infinite alternate;
+}
+
+.aurora-blob-1 {
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, #4f8fff 0%, #7c3aed 50%, transparent 70%);
+    top: -10%;
+    left: -5%;
+    animation-duration: 22s;
+}
+
+.aurora-blob-2 {
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(circle, #06b6d4 0%, #4f8fff 50%, transparent 70%);
+    top: 30%;
+    right: -10%;
+    animation-duration: 18s;
+    animation-delay: -5s;
+}
+
+.aurora-blob-3 {
+    width: 450px;
+    height: 450px;
+    background: radial-gradient(circle, #7c3aed 0%, #ec4899 50%, transparent 70%);
+    bottom: -10%;
+    left: 30%;
+    animation-duration: 25s;
+    animation-delay: -10s;
+}
+
+@keyframes aurora-drift {
+    0% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(40px, -30px) scale(1.05); }
+    66% { transform: translate(-20px, 20px) scale(0.95); }
+    100% { transform: translate(30px, -10px) scale(1.02); }
+}
+
+/* ========== 音波背景 ========== */
+
+#wave-canvas {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0.06;
+}
+
+/* ========== 粒子背景 ========== */
+
+#particle-canvas {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0.4;
 }
 
 .app {
     height: 100vh;
     display: flex;
     flex-direction: column;
+    position: relative;
+    z-index: 10;
 }
 
 /* ── 顶部控制栏 ── */
