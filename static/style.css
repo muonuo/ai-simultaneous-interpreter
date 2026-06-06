@@ -181,15 +181,8 @@ html, body {
 }
 
 .subtitle-source {
-    font-size: 16px;
-    font-weight: 400;
-    color: rgba(255, 255, 255, 0.75);
-    line-height: 1.4;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
-    margin-bottom: 2px;
+    display: none;
 }
-
-.subtitle-source:empty { display: none; }
 
 .subtitle-target {
     font-size: 24px;
@@ -204,11 +197,6 @@ html, body {
 
 .subtitle-source.interim { opacity: 0.6; }
 .subtitle-target.interim { opacity: 0.6; }
-
-.subtitle-target[data-state="connecting"]::before {
-    content: '正在连接...';
-    opacity: 0.6;
-}
 
 .subtitle-overlay.corrected {
     animation: flash-correct 0.5s ease;
@@ -240,12 +228,6 @@ html, body {
     max-width: min(75vw, 900px);
     text-align: center;
     opacity: 0.7;
-    transition: opacity 2s ease-out, transform 2s ease-out;
-}
-
-.history-item.fading {
-    opacity: 0;
-    transform: translateY(-6px);
 }
 
 .history-item .h-en {
