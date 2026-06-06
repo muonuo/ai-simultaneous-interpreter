@@ -1,4 +1,4 @@
-/**
+﻿/**
  * SimulCast — AI 同声传译助手
  *
  * 核心流程：
@@ -13,6 +13,7 @@
 const S = {
     isTranslating: false,
     ws: null,
+    sourceLang: "en",
     _audioCtx: null,
     _processor: null,
     _stream: null,
@@ -225,7 +226,8 @@ function connectWS() {
     return new Promise((resolve, reject) => {
         if (S.ws && S.ws.readyState === WebSocket.OPEN) { resolve(S.ws); return; }
         const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-        S.ws = new WebSocket(`${proto}://${location.host}/ws/translate`);
+        const lang = S.sourceLang || "en";
+        S.ws = new WebSocket(`${proto}://${location.host}/ws/translate?source_lang=${lang}`);
         S.ws.binaryType = 'arraybuffer';
 
         S.ws.onopen = () => {
@@ -397,4 +399,12 @@ window.addEventListener('beforeunload', () => {
     if (S.isTranslating) stopTranslation();
 });
 
-console.log('SimulCast 已就绪 | 视频搬运 + 字幕一体化 + 可拖拽');
+// 语言选择
+const sourceLangSelect = document.getElementById('source-lang');
+if (sourceLangSelect) {
+    sourceLangSelect.addEventListener('change', (e) => {
+        S.sourceLang = e.target.value;
+    });
+}
+
+console.log('SimulCast 已就绪 | 视频搬运 + 字幕一体化 + 多语言支持');

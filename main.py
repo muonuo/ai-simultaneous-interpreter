@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 load_dotenv()  # 最先加载 .env，确保所有模块能读到 API Key
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from translator_live import LiveTranslator
 
@@ -37,6 +37,7 @@ async def pip_page() -> FileResponse:
 
 @app.websocket("/ws/translate")
 async def websocket_translate(websocket: WebSocket) -> None:
+    source_lang = websocket.query_params.get("source_lang", "en")
     """
     翻译 WebSocket 端点
 
@@ -70,7 +71,7 @@ async def websocket_translate(websocket: WebSocket) -> None:
 
     # 每个连接创建独立的 LiveTranslator 实例
     translator = LiveTranslator()
-    translator.connect(on_result=on_result)
+    translator.connect(source_lang=source_lang, on_result=on_result)
 
     try:
         while True:
