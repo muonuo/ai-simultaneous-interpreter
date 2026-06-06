@@ -28,11 +28,12 @@ class LiveTranslator:
         self.ready = threading.Event()
         self._thread: threading.Thread | None = None
         self._on_result: callable | None = None  # callback(en_text, zh_text, msg_type)
+        self._source_lang: str = 'en'  # 源语言代码
 
         # 流式状态追踪
         self._accumulated_zh: str = ""  # 累积的中文翻译 (text + stash)
 
-    def connect(self, on_result: callable = None):
+    def connect(self, source_lang: str = "en", on_result: callable = None):
         """建立 LiveTranslate WebSocket 连接
 
         Args:
@@ -40,6 +41,7 @@ class LiveTranslator:
                        msg_type: "interim" | "final" | "corrected"
         """
         self._on_result = on_result
+        self._source_lang = source_lang
         self.ws = websocket.WebSocketApp(
             WS_URL,
             header=["Authorization: Bearer " + DASHSCOPE_API_KEY],
@@ -60,7 +62,7 @@ class LiveTranslator:
                 "input_audio_format": "pcm",
                 "input_audio_transcription": {
                     "model": "qwen3-asr-flash-realtime",
-                    "language": "en",
+                    "language": self._source_lang,
                 },
                 "translation": {"language": "zh"},
             },
