@@ -41,14 +41,24 @@ const D = {
 // ============================================================
 const FADE_AFTER_MS = 5000;   // 5秒无活动 → 隐藏
 const MAX_LEN       = 120;    // 中文字符宽，120个足够
+const MAX_HISTORY   = 100;    // 最多保存100条历史
 
 let fadeTimer = null;
+let currentEn = '';  // 当前英文句子
+let currentZh = '';  // 当前中文句子
+let sessionEn = [];  // 整个会话的英文句子
+let sessionZh = [];  // 整个会话的中文句子
 
-function handleDelta(text, type) {
+function handleDelta(enText, zhText, type) {
     D.overlay.classList.add('visible');
     resetTimers();
 
-    const display = getLastSentence(text);
+    // 更新当前句子
+    if (enText) currentEn = enText;
+    if (zhText) currentZh = zhText;
+
+    // 显示中文
+    const display = getLastSentence(zhText || currentZh);
     D.subTarget.textContent = display;
 
     if (type === 'interim') {
@@ -58,6 +68,14 @@ function handleDelta(text, type) {
         if (type === 'corrected') {
             D.overlay.classList.add('corrected');
             setTimeout(() => D.overlay.classList.remove('corrected'), 500);
+        }
+        // final 时累积到会话记录
+        if (type === 'final' && currentZh) {
+            // 避免重复
+            if (sessionZh.length === 0 || sessionZh[sessionZh.length - 1] !== currentZh) {
+                sessionEn.push(currentEn);
+                sessionZh.push(currentZh);
+            }
         }
     }
 }
@@ -84,6 +102,120 @@ function clearSubtitle() {
     D.subTarget.textContent = '';
     D.overlay.classList.remove('visible');
     if (fadeTimer) clearTimeout(fadeTimer);
+    currentEn = '';
+    currentZh = '';
+    sessionEn = [];
+    sessionZh = [];
+}
+
+// ============================================================
+// 历史记录
+// ============================================================
+function getHistory() {
+    try {
+        return JSON.parse(localStorage.getItem('simulcast_history') || '[]');
+    } catch {
+        return [];
+    }
+}
+
+function saveToHistory(en, zh) {
+    if (!zh) return;
+    const history = getHistory();
+    // 避免重复（和上一条相同则跳过）
+    if (history.length > 0 && history[0].zh === zh) return;
+
+    history.unshift({
+        en: en || '',
+        zh: zh,
+        time: Date.now(),
+    });
+    // 限制数量
+    if (history.length > MAX_HISTORY) history.pop();
+    localStorage.setItem('simulcast_history', JSON.stringify(history));
+}
+
+function clearHistory() {
+    localStorage.removeItem('simulcast_history');
+    renderHistory();
+}
+
+function renderHistory() {
+    const history = getHistory();
+    const panel = document.getElementById('history-panel');
+    const list = document.getElementById('history-list');
+
+    if (history.length === 0) {
+        list.innerHTML = '<div class="history-empty">暂无翻译记录</div>';
+        return;
+    }
+
+    list.innerHTML = history.map((item, i) => `
+        <div class="history-item" data-index="${i}">
+            <input type="checkbox" class="history-check" data-index="${i}">
+            <div class="history-content">
+                ${item.en ? `<div class="h-en">${escapeHtml(item.en)}</div>` : ''}
+                <div class="h-zh">${escapeHtml(item.zh)}</div>
+                <div class="h-time">${formatTime(item.time)}</div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function formatTime(ts) {
+    const d = new Date(ts);
+    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+}
+
+// 导出选中的历史记录
+function exportSelected() {
+    const checks = document.querySelectorAll('.history-check:checked');
+    if (checks.length === 0) {
+        alert('请先选择要导出的记录');
+        return;
+    }
+
+    const history = getHistory();
+    const selected = Array.from(checks).map(c => history[parseInt(c.dataset.index)]);
+
+    // 生成 TXT 内容
+    let txt = '=== SimulCast 翻译记录 ===\n\n';
+    selected.forEach((item, i) => {
+        txt += `[${i + 1}] ${formatTime(item.time)}\n`;
+        if (item.en) txt += `EN: ${item.en}\n`;
+        txt += `ZH: ${item.zh}\n\n`;
+    });
+
+    // 下载
+    const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `simulcast_${new Date().toISOString().slice(0, 10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+// 全选/取消全选
+function toggleSelectAll() {
+    const checks = document.querySelectorAll('.history-check');
+    const allChecked = Array.from(checks).every(c => c.checked);
+    checks.forEach(c => c.checked = !allChecked);
+}
+
+// 打开历史面板
+function toggleHistory() {
+    const panel = document.getElementById('history-panel');
+    panel.classList.toggle('visible');
+    if (panel.classList.contains('visible')) {
+        renderHistory();
+    }
 }
 
 // ============================================================
@@ -104,9 +236,9 @@ function connectWS() {
         S.ws.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
-                if (data.zh_text) handleDelta(data.zh_text, data.type);
+                handleDelta(data.en_text || '', data.zh_text || '', data.type);
             } catch {
-                handleDelta(event.data, 'final');
+                handleDelta('', event.data, 'final');
             }
         };
 
@@ -223,6 +355,13 @@ async function startTranslation() {
 }
 
 function stopTranslation() {
+    // 停止时保存整个会话为一条记录
+    if (sessionZh.length > 0) {
+        const fullEn = sessionEn.join(' ');
+        const fullZh = sessionZh.join('。');
+        saveToHistory(fullEn, fullZh);
+    }
+
     S.isTranslating = false;
     stopCapture();
     disconnectWS();
