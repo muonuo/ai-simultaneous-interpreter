@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -24,6 +24,7 @@
                 <span class="status-dot" id="status-dot"></span>
                 <span id="status-text">就绪</span>
             </span>
+            <button class="history-btn" id="history-btn" onclick="toggleHistory()">📋 历史</button>
             <button class="ctrl-btn" id="ctrl-btn">
                 <span class="ctrl-btn-icon" id="ctrl-icon">▶</span>
                 <span id="ctrl-label">开始翻译</span>
@@ -36,11 +37,9 @@
         <video id="video-player" autoplay playsinline></video>
 
         <!-- 历史字幕（淡出消失） -->
-        <div class="subtitle-history" id="subtitle-history"></div>
 
         <!-- 字幕覆盖层（可拖拽 + 毛玻璃） -->
         <div class="subtitle-overlay" id="subtitle-overlay">
-            <div class="subtitle-source" id="sub-source"></div>
             <div class="subtitle-target" id="sub-target"></div>
         </div>
     </div>
@@ -65,7 +64,23 @@
     <!-- ═══ 底部信息栏 ═══ -->
     <div class="bottombar">
         <span>Powered by 阿里云百炼 LiveTranslate</span>
-        <span>v0.3.0</span>
+        <span>v0.4.0</span>
+    </div>
+
+    <!-- ═══ 历史记录面板 ═══ -->
+    <div class="history-panel" id="history-panel">
+        <div class="history-header">
+            <h3>翻译记录</h3>
+            <div class="history-actions">
+                <button onclick="toggleSelectAll()">全选</button>
+                <button onclick="exportSelected()" class="btn-primary">导出</button>
+                <button onclick="clearHistory()" class="btn-danger">清空</button>
+                <button onclick="toggleHistory()">✕</button>
+            </div>
+        </div>
+        <div class="history-list" id="history-list">
+            <div class="history-empty">暂无翻译记录</div>
+        </div>
     </div>
 
 </div>
