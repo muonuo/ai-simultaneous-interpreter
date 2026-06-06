@@ -1,4 +1,4 @@
-/* ============================================
+﻿/* ============================================
    SimulCast — AI 同声传译助手
    视频 + 字幕一体化页面
    ============================================ */
@@ -191,6 +191,10 @@ html, body {
     line-height: 1.35;
     letter-spacing: 0.2px;
     text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
+    /* 限制两行高度 */
+    max-height: 2.7em;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .subtitle-target:empty { display: none; }
@@ -205,42 +209,6 @@ html, body {
 @keyframes flash-correct {
     0%   { border-color: rgba(91, 140, 255, 0.5); }
     100% { border-color: rgba(255, 255, 255, 0.08); }
-}
-
-/* ── 历史字幕（淡出消失） ── */
-.subtitle-history {
-    position: absolute;
-    left: 0; right: 0; bottom: 100px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    pointer-events: none;
-    z-index: 4;
-}
-
-.history-item {
-    padding: 6px 18px;
-    background: rgba(15, 17, 22, 0.55);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-radius: 10px;
-    max-width: min(75vw, 900px);
-    text-align: center;
-    opacity: 0.7;
-}
-
-.history-item .h-en {
-    font-size: 13px;
-    color: rgba(200, 215, 240, 0.5);
-    line-height: 1.3;
-}
-
-.history-item .h-zh {
-    font-size: 16px;
-    font-weight: 500;
-    color: rgba(255, 255, 255, 0.6);
-    line-height: 1.3;
 }
 
 /* ── 使用说明（未开始时） ── */

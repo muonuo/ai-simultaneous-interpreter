@@ -1,4 +1,4 @@
-/**
+﻿/**
  * SimulCast — AI 同声传译助手
  *
  * 核心流程：
@@ -13,6 +13,7 @@
 const S = {
     isTranslating: false,
     ws: null,
+    sourceLang: "en",
     _audioCtx: null,
     _processor: null,
     _stream: null,
@@ -39,16 +40,25 @@ const D = {
 // ============================================================
 // 字幕逻辑
 // ============================================================
-const FADE_AFTER_MS = 5000;   // 5秒无活动 → 隐藏
-const MAX_LEN       = 120;    // 中文字符宽，120个足够
+const FADE_AFTER_MS = 8000;   // 8秒无活动 → 隐藏
+const MAX_LEN       = 100;    // 单句最大长度
+const MAX_LINES     = 2;      // 最多显示2行
+const MAX_HISTORY   = 100;    // 最多保存100条历史
 
 let fadeTimer = null;
+let currentEn = '';  // 当前英文句子
+let currentZh = '';  // 当前中文句子
 
-function handleDelta(text, type) {
+function handleDelta(enText, zhText, type) {
     D.overlay.classList.add('visible');
     resetTimers();
 
-    const display = getLastSentence(text);
+    // 更新当前句子
+    if (enText) currentEn = enText;
+    if (zhText) currentZh = zhText;
+
+    // 显示中文（取最后2句）
+    const display = getRecentSentences(zhText || currentZh);
     D.subTarget.textContent = display;
 
     if (type === 'interim') {
@@ -59,21 +69,34 @@ function handleDelta(text, type) {
             D.overlay.classList.add('corrected');
             setTimeout(() => D.overlay.classList.remove('corrected'), 500);
         }
+        // final 时保存历史记录
+        if (type === 'final' && currentZh) {
+            saveToHistory(currentEn, currentZh);
+        }
     }
 }
 
-// 只取最后一句（按句号/问号/感叹号分割）
-function getLastSentence(text) {
+// 取最后2句话，限制总长度
+function getRecentSentences(text) {
     if (!text) return '';
+    // 按句号分割
     const parts = text.split(/[。！？!?\n]+/).filter(s => s.trim());
-    const last = parts.length > 0 ? parts[parts.length - 1].trim() : text.trim();
-    if (last.length > MAX_LEN) return '...' + last.slice(last.length - MAX_LEN);
-    return last;
+
+    // 取最后2句
+    const recent = parts.slice(-MAX_LINES);
+    let result = recent.join('。');
+
+    // 限制总长度
+    if (result.length > MAX_LEN * MAX_LINES) {
+        result = '...' + result.slice(-(MAX_LEN * MAX_LINES));
+    }
+
+    return result;
 }
 
 function resetTimers() {
     if (fadeTimer) clearTimeout(fadeTimer);
-    // 5秒无活动 → 隐藏字幕
+    // 8秒无活动 → 隐藏字幕
     fadeTimer = setTimeout(() => {
         D.overlay.classList.remove('visible');
         D.subTarget.textContent = '';
@@ -84,6 +107,118 @@ function clearSubtitle() {
     D.subTarget.textContent = '';
     D.overlay.classList.remove('visible');
     if (fadeTimer) clearTimeout(fadeTimer);
+    currentEn = '';
+    currentZh = '';
+}
+
+// ============================================================
+// 历史记录
+// ============================================================
+function getHistory() {
+    try {
+        return JSON.parse(localStorage.getItem('simulcast_history') || '[]');
+    } catch {
+        return [];
+    }
+}
+
+function saveToHistory(en, zh) {
+    if (!zh) return;
+    const history = getHistory();
+    // 避免重复（和上一条相同则跳过）
+    if (history.length > 0 && history[0].zh === zh) return;
+
+    history.unshift({
+        en: en || '',
+        zh: zh,
+        time: Date.now(),
+    });
+    // 限制数量
+    if (history.length > MAX_HISTORY) history.pop();
+    localStorage.setItem('simulcast_history', JSON.stringify(history));
+}
+
+function clearHistory() {
+    localStorage.removeItem('simulcast_history');
+    renderHistory();
+}
+
+function renderHistory() {
+    const history = getHistory();
+    const panel = document.getElementById('history-panel');
+    const list = document.getElementById('history-list');
+
+    if (history.length === 0) {
+        list.innerHTML = '<div class="history-empty">暂无翻译记录</div>';
+        return;
+    }
+
+    list.innerHTML = history.map((item, i) => `
+        <div class="history-item" data-index="${i}">
+            <input type="checkbox" class="history-check" data-index="${i}">
+            <div class="history-content">
+                ${item.en ? `<div class="h-en">${escapeHtml(item.en)}</div>` : ''}
+                <div class="h-zh">${escapeHtml(item.zh)}</div>
+                <div class="h-time">${formatTime(item.time)}</div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function formatTime(ts) {
+    const d = new Date(ts);
+    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+}
+
+// 导出选中的历史记录
+function exportSelected() {
+    const checks = document.querySelectorAll('.history-check:checked');
+    if (checks.length === 0) {
+        alert('请先选择要导出的记录');
+        return;
+    }
+
+    const history = getHistory();
+    const selected = Array.from(checks).map(c => history[parseInt(c.dataset.index)]);
+
+    // 生成 TXT 内容
+    let txt = '=== SimulCast 翻译记录 ===\n\n';
+    selected.forEach((item, i) => {
+        txt += `[${i + 1}] ${formatTime(item.time)}\n`;
+        if (item.en) txt += `EN: ${item.en}\n`;
+        txt += `ZH: ${item.zh}\n\n`;
+    });
+
+    // 下载
+    const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `simulcast_${new Date().toISOString().slice(0, 10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+// 全选/取消全选
+function toggleSelectAll() {
+    const checks = document.querySelectorAll('.history-check');
+    const allChecked = Array.from(checks).every(c => c.checked);
+    checks.forEach(c => c.checked = !allChecked);
+}
+
+// 打开历史面板
+function toggleHistory() {
+    const panel = document.getElementById('history-panel');
+    panel.classList.toggle('visible');
+    if (panel.classList.contains('visible')) {
+        renderHistory();
+    }
 }
 
 // ============================================================
@@ -93,7 +228,8 @@ function connectWS() {
     return new Promise((resolve, reject) => {
         if (S.ws && S.ws.readyState === WebSocket.OPEN) { resolve(S.ws); return; }
         const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-        S.ws = new WebSocket(`${proto}://${location.host}/ws/translate`);
+        const lang = S.sourceLang || "en";
+        S.ws = new WebSocket(`${proto}://${location.host}/ws/translate?source_lang=${lang}`);
         S.ws.binaryType = 'arraybuffer';
 
         S.ws.onopen = () => {
@@ -104,9 +240,9 @@ function connectWS() {
         S.ws.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
-                if (data.zh_text) handleDelta(data.zh_text, data.type);
+                handleDelta(data.en_text || '', data.zh_text || '', data.type);
             } catch {
-                handleDelta(event.data, 'final');
+                handleDelta('', event.data, 'final');
             }
         };
 
@@ -223,6 +359,11 @@ async function startTranslation() {
 }
 
 function stopTranslation() {
+    // 停止前保存当前句子到历史记录
+    if (currentZh) {
+        saveToHistory(currentEn, currentZh);
+    }
+
     S.isTranslating = false;
     stopCapture();
     disconnectWS();
@@ -258,4 +399,12 @@ window.addEventListener('beforeunload', () => {
     if (S.isTranslating) stopTranslation();
 });
 
-console.log('SimulCast 已就绪 | 视频搬运 + 字幕一体化 + 可拖拽');
+// 语言选择
+const sourceLangSelect = document.getElementById('source-lang');
+if (sourceLangSelect) {
+    sourceLangSelect.addEventListener('change', (e) => {
+        S.sourceLang = e.target.value;
+    });
+}
+
+console.log('SimulCast 已就绪 | 视频搬运 + 字幕一体化 + 多语言支持');
