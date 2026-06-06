@@ -24,8 +24,8 @@ SimulCast 是一款浏览器端的 AI 同声传译工具，帮助用户实时理
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/muonuo/ai-simultaneous-interpreter.git
-cd ai-simultaneous-interpreter
+git clone https://github.com/muonuo/SimulCast.git
+cd SimulCast
 
 # 2. 创建虚拟环境
 python -m venv venv
