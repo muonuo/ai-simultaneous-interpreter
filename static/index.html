@@ -12,22 +12,22 @@
 <body>
 <div class="app">
 
-    <!-- ═══ 顶部控制栏 ═══ -->
-    <div class="topbar">
+    <!-- ═══ 顶部控制栏（翻译前简化） ═══ -->
+    <div class="topbar" id="topbar">
         <div class="topbar-left">
             <span class="brand-dot" id="brand-dot"></span>
             <span class="brand-name">SimulCast</span>
             <span class="brand-badge">AI 同声传译</span>
         </div>
         <div class="topbar-right">
-            <span class="status-text">
+            <button class="history-btn" id="history-btn" onclick="toggleHistory()">📋 历史</button>
+            <span class="status-text" id="status-area">
                 <span class="status-dot" id="status-dot"></span>
                 <span id="status-text">就绪</span>
             </span>
-            <button class="history-btn" id="history-btn" onclick="toggleHistory()">📋 历史</button>
             <button class="ctrl-btn" id="ctrl-btn">
-                <span class="ctrl-btn-icon" id="ctrl-icon">▶</span>
-                <span id="ctrl-label">开始翻译</span>
+                <span class="ctrl-btn-icon" id="ctrl-icon">⏹</span>
+                <span id="ctrl-label">停止翻译</span>
             </button>
         </div>
     </div>
@@ -36,7 +36,6 @@
     <div class="video-stage" id="video-stage">
         <video id="video-player" autoplay playsinline></video>
 
-        <!-- 历史字幕（淡出消失） -->
 
         <!-- 字幕覆盖层（可拖拽 + 毛玻璃） -->
         <div class="subtitle-overlay" id="subtitle-overlay">
@@ -46,29 +45,28 @@
 
     <!-- ═══ 空状态（未开始时） ═══ -->
     <div class="guide" id="guide">
-        <div class="guide-icon">
-            <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/><path d="M7 8l3 3-3 3"/><line x1="13" y1="14" x2="17" y2="14"/></svg>
+        <div class="brand-hero">
+            <h1 class="brand-logo">SimulCast</h1>
+            <p class="brand-tagline">AI 同声传译助手</p>
+            <p class="brand-desc">实时翻译外语视频，自动生成中文字幕</p>
         </div>
-        <h2 class="guide-title">AI 同声传译助手</h2>
-        <p class="guide-desc">
-            点击「开始翻译」→ 选择正在播放视频的浏览器标签页。
-            视频会搬到这个页面，字幕自动浮在视频上方。
-        </p>
-        <div class="steps">
-            <div class="step"><span class="step-num">1</span><span>在另一个标签页打开外语视频</span></div>
-            <div class="step"><span class="step-num">2</span><span>点击「开始翻译」→ 选择视频标签页</span></div>
-            <div class="step"><span class="step-num">3</span><span>视频搬到此页面，字幕自动显示</span></div>
-        </div>
-        <div class="lang-selector">
-            <label class="lang-label">源语言</label>
-            <select id="source-lang" class="lang-dropdown">
-                <option value="en">English 英语</option>
-                <option value="ja">日本語 日语</option>
-                <option value="ko">한국어 韩语</option>
-                <option value="fr">Français 法语</option>
-                <option value="de">Deutsch 德语</option>
-                <option value="es">Español 西班牙语</option>
-            </select>
+        <div class="guide-content">
+            <button class="start-btn" id="start-btn">
+                <span class="start-btn-icon">▶</span>
+                <span>开始翻译</span>
+            </button>
+            <div class="lang-selector">
+                <label class="lang-label">源语言</label>
+                <select id="source-lang" class="lang-dropdown">
+                    <option value="en">English 英语</option>
+                    <option value="ja">日本語 日语</option>
+                    <option value="ko">한국어 韩语</option>
+                    <option value="fr">Français 法语</option>
+                    <option value="de">Deutsch 德语</option>
+                    <option value="es">Español 西班牙语</option>
+                </select>
+            </div>
+            <p class="guide-hint">选择正在播放视频的浏览器标签页，视频会搬到这个页面</p>
         </div>
     </div>
 

@@ -23,6 +23,8 @@ const S = {
 // DOM
 // ============================================================
 const D = {
+    topbar:       document.getElementById('topbar'),
+    startBtn:     document.getElementById('start-btn'),
     ctrlBtn:      document.getElementById('ctrl-btn'),
     ctrlIcon:     document.getElementById('ctrl-icon'),
     ctrlLabel:    document.getElementById('ctrl-label'),
@@ -40,8 +42,9 @@ const D = {
 // ============================================================
 // 字幕逻辑
 // ============================================================
-const FADE_AFTER_MS = 5000;   // 5秒无活动 → 隐藏
-const MAX_LEN       = 120;    // 中文字符宽，120个足够
+const FADE_AFTER_MS = 8000;   // 8秒无活动 → 隐藏
+const MAX_LEN       = 100;    // 单句最大长度
+const MAX_LINES     = 2;      // 最多显示2行
 const MAX_HISTORY   = 100;    // 最多保存100条历史
 
 let fadeTimer = null;
@@ -58,8 +61,8 @@ function handleDelta(enText, zhText, type) {
     if (enText) currentEn = enText;
     if (zhText) currentZh = zhText;
 
-    // 显示中文
-    const display = getLastSentence(zhText || currentZh);
+    // 显示中文（取最后2句）
+    const display = getRecentSentences(zhText || currentZh);
     D.subTarget.textContent = display;
 
     if (type === 'interim') {
@@ -70,29 +73,38 @@ function handleDelta(enText, zhText, type) {
             D.overlay.classList.add('corrected');
             setTimeout(() => D.overlay.classList.remove('corrected'), 500);
         }
-        // final 时累积到会话记录
+        // final 时累积到会话记录并更新实时转录
         if (type === 'final' && currentZh) {
-            // 避免重复
             if (sessionZh.length === 0 || sessionZh[sessionZh.length - 1] !== currentZh) {
                 sessionEn.push(currentEn);
                 sessionZh.push(currentZh);
+                renderLiveTranscript();
             }
         }
     }
 }
 
-// 只取最后一句（按句号/问号/感叹号分割）
-function getLastSentence(text) {
+// 取最后2句话，限制总长度
+function getRecentSentences(text) {
     if (!text) return '';
+    // 按句号分割
     const parts = text.split(/[。！？!?\n]+/).filter(s => s.trim());
-    const last = parts.length > 0 ? parts[parts.length - 1].trim() : text.trim();
-    if (last.length > MAX_LEN) return '...' + last.slice(last.length - MAX_LEN);
-    return last;
+
+    // 取最后2句
+    const recent = parts.slice(-MAX_LINES);
+    let result = recent.join('。');
+
+    // 限制总长度
+    if (result.length > MAX_LEN * MAX_LINES) {
+        result = '...' + result.slice(-(MAX_LEN * MAX_LINES));
+    }
+
+    return result;
 }
 
 function resetTimers() {
     if (fadeTimer) clearTimeout(fadeTimer);
-    // 5秒无活动 → 隐藏字幕
+    // 8秒无活动 → 隐藏字幕
     fadeTimer = setTimeout(() => {
         D.overlay.classList.remove('visible');
         D.subTarget.textContent = '';
@@ -123,7 +135,6 @@ function getHistory() {
 function saveToHistory(en, zh) {
     if (!zh) return;
     const history = getHistory();
-    // 避免重复（和上一条相同则跳过）
     if (history.length > 0 && history[0].zh === zh) return;
 
     history.unshift({
@@ -131,7 +142,6 @@ function saveToHistory(en, zh) {
         zh: zh,
         time: Date.now(),
     });
-    // 限制数量
     if (history.length > MAX_HISTORY) history.pop();
     localStorage.setItem('simulcast_history', JSON.stringify(history));
 }
@@ -141,12 +151,43 @@ function clearHistory() {
     renderHistory();
 }
 
+// 实时转录：翻译中直接显示 session 累积内容
+function renderLiveTranscript() {
+    const list = document.getElementById('history-list');
+    if (!list) return;
+
+    // 如果没有在翻译或没有内容，移除实时转录
+    if (!S.isTranslating || sessionZh.length === 0) {
+        const existing = list.querySelector('.history-item.live');
+        if (existing) existing.remove();
+        return;
+    }
+
+    const fullEn = sessionEn.join(' ');
+    const fullZh = sessionZh.join('。');
+    const liveHtml = `
+        <div class="history-item live">
+            <div class="history-content">
+                <div class="h-live-badge">● 翻译中</div>
+                ${fullEn ? `<div class="h-en">${escapeHtml(fullEn)}</div>` : ''}
+                <div class="h-zh">${escapeHtml(fullZh)}</div>
+            </div>
+        </div>
+    `;
+
+    const existing = list.querySelector('.history-item.live');
+    if (existing) {
+        existing.outerHTML = liveHtml;
+    } else {
+        list.insertAdjacentHTML('afterbegin', liveHtml);
+    }
+}
+
 function renderHistory() {
     const history = getHistory();
-    const panel = document.getElementById('history-panel');
     const list = document.getElementById('history-list');
 
-    if (history.length === 0) {
+    if (history.length === 0 && !S.isTranslating) {
         list.innerHTML = '<div class="history-empty">暂无翻译记录</div>';
         return;
     }
@@ -161,6 +202,9 @@ function renderHistory() {
             </div>
         </div>
     `).join('');
+
+    // 如果正在翻译，叠加实时转录
+    renderLiveTranscript();
 }
 
 function escapeHtml(text) {
@@ -216,6 +260,7 @@ function toggleHistory() {
     panel.classList.toggle('visible');
     if (panel.classList.contains('visible')) {
         renderHistory();
+        renderLiveTranscript();
     }
 }
 
@@ -288,6 +333,7 @@ async function startCapture() {
         D.videoPlayer.muted = true;
         D.videoStage.classList.add('visible');
         D.guide.classList.add('hidden');
+        D.topbar.classList.add('active');
         S._stream = stream;
 
         // 音频处理：PCM16 → WebSocket
@@ -334,6 +380,7 @@ function stopCapture() {
     D.videoPlayer.srcObject = null;
     D.videoStage.classList.remove('visible');
     D.guide.classList.remove('hidden');
+    D.topbar.classList.remove('active');
 }
 
 // ============================================================
@@ -357,11 +404,9 @@ async function startTranslation() {
 }
 
 function stopTranslation() {
-    // 停止时保存整个会话为一条记录
+    // 保存会话为历史记录
     if (sessionZh.length > 0) {
-        const fullEn = sessionEn.join(' ');
-        const fullZh = sessionZh.join('。');
-        saveToHistory(fullEn, fullZh);
+        saveToHistory(sessionEn.join(' '), sessionZh.join('。'));
     }
 
     S.isTranslating = false;
@@ -374,6 +419,8 @@ function stopTranslation() {
     D.ctrlLabel.textContent = '开始翻译';
     D.brandDot.classList.remove('active');
     updateStatus('', '就绪');
+
+    renderHistory();
 }
 
 // ============================================================
@@ -387,12 +434,21 @@ function updateStatus(dotClass, text) {
 // ============================================================
 // 事件绑定
 // ============================================================
+// 中央开始按钮
+D.startBtn.addEventListener('click', () => {
+    startTranslation();
+});
+
+// 顶栏停止按钮（翻译中才显示）
 D.ctrlBtn.addEventListener('click', () => {
-    S.isTranslating ? stopTranslation() : startTranslation();
+    if (S.isTranslating) stopTranslation();
 });
 
 document.addEventListener('keydown', (e) => {
-    if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); D.ctrlBtn.click(); }
+    if (e.ctrlKey && e.key === 'Enter') {
+        e.preventDefault();
+        S.isTranslating ? stopTranslation() : startTranslation();
+    }
 });
 
 window.addEventListener('beforeunload', () => {

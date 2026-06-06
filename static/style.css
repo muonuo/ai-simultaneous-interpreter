@@ -47,7 +47,7 @@ html, body {
     padding: 10px 20px;
     border-bottom: 1px solid var(--border);
     background: var(--bg-card);
-    z-index: 10;
+    z-index: 200;
 }
 
 .topbar-left {
@@ -81,6 +81,18 @@ html, body {
     display: flex;
     align-items: center;
     gap: 12px;
+}
+
+/* 翻译前隐藏品牌、状态栏和停止按钮 */
+.topbar:not(.active) .topbar-left,
+.topbar:not(.active) #status-area,
+.topbar:not(.active) #ctrl-btn {
+    display: none;
+}
+
+/* 翻译前历史按钮靠右 */
+.topbar:not(.active) .topbar-right {
+    margin-left: auto;
 }
 
 .status-text {
@@ -220,6 +232,75 @@ html, body {
 
 .guide.hidden { display: none; }
 
+/* ── 品牌主视觉 ── */
+.brand-hero {
+    text-align: center;
+    margin-bottom: 32px;
+}
+
+.brand-logo {
+    font-size: 56px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -2px;
+    margin-bottom: 12px;
+    background: linear-gradient(135deg, #fff 0%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.brand-tagline {
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 8px;
+}
+
+.brand-desc {
+    font-size: 14px;
+    color: var(--text-dim);
+}
+
+.guide-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+
+/* 中央开始按钮 */
+.start-btn {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 40px;
+    font-size: 18px;
+    font-weight: 600;
+    color: #fff;
+    background: var(--accent);
+    border: none;
+    border-radius: 50px;
+    cursor: pointer;
+    transition: all 0.3s;
+    box-shadow: 0 4px 20px rgba(79,143,255,0.3);
+}
+
+.start-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 30px rgba(79,143,255,0.4);
+}
+
+.start-btn-icon {
+    font-size: 16px;
+}
+
+.guide-hint {
+    font-size: 13px;
+    color: var(--text-muted);
+    text-align: center;
+}
+
 .guide-icon { color: var(--text-muted); opacity: 0.6; }
 
 .guide-title {
@@ -299,13 +380,13 @@ html, body {
 /* ── 历史记录面板 ── */
 .history-panel {
     position: fixed;
-    top: 0;
+    top: 48px;
     right: -420px;
     width: 400px;
-    height: 100vh;
+    height: calc(100vh - 48px);
     background: var(--bg-card);
     border-left: 1px solid var(--border);
-    z-index: 100;
+    z-index: 150;
     display: flex;
     flex-direction: column;
     transition: right 0.3s ease;
@@ -395,6 +476,28 @@ html, body {
     background: var(--bg-hover);
 }
 
+/* 实时记录样式 */
+.history-item.live {
+    border-left: 3px solid var(--accent);
+    background: var(--accent-dim);
+}
+
+.h-live-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 4px;
+    animation: live-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
 .history-check {
     flex-shrink: 0;
     margin-top: 4px;
@@ -428,4 +531,45 @@ html, body {
     font-size: 11px;
     color: var(--text-muted);
     margin-top: 4px;
+}
+/* ── 语言选择器 ── */
+.lang-selector {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 20px;
+    padding: 10px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    width: 100%;
+    max-width: 400px;
+}
+
+.lang-label {
+    font-size: 13px;
+    color: var(--text-dim);
+    white-space: nowrap;
+}
+
+.lang-dropdown {
+    flex: 1;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    font-family: var(--font);
+    cursor: pointer;
+    outline: none;
+}
+
+.lang-dropdown:focus {
+    border-color: var(--accent);
+}
+
+.lang-dropdown option {
+    background: var(--bg-card);
+    color: var(--text);
 }
