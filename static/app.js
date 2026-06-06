@@ -621,9 +621,9 @@ if (sourceLangSelect) {
         const ctx = waveCanvas.getContext('2d');
         let w, h;
         const waves = [
-            { amp: 50, freq: 0.006, speed: 0.012, color: '#4f8fff' },
-            { amp: 35, freq: 0.01, speed: 0.018, color: '#7c3aed' },
-            { amp: 40, freq: 0.004, speed: 0.008, color: '#06b6d4' },
+            { amp: 70, freq: 0.005, speed: 0.01, color: '#4f8fff' },
+            { amp: 50, freq: 0.008, speed: 0.015, color: '#7c3aed' },
+            { amp: 60, freq: 0.003, speed: 0.007, color: '#06b6d4' },
         ];
         let offset = 0;
 
@@ -645,7 +645,7 @@ if (sourceLangSelect) {
                     ctx.lineTo(x, y);
                 }
                 ctx.strokeStyle = wave.color;
-                ctx.lineWidth = 2.5;
+                ctx.lineWidth = 3;
                 ctx.stroke();
             });
             offset++;
