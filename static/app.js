@@ -255,45 +255,35 @@ function exportSelected() {
     const history = getHistory();
     const selected = Array.from(checks).map(c => history[parseInt(c.dataset.index)]);
 
-    // 构建打印内容
-    let html = `
-        <html>
-        <head>
-            <title>SimulCast 翻译记录</title>
-            <style>
-                body { font-family: 'Noto Sans SC', 'Microsoft YaHei', sans-serif; padding: 40px; color: #333; }
-                h1 { text-align: center; font-size: 24px; margin-bottom: 5px; }
-                .date { text-align: center; font-size: 12px; color: #888; margin-bottom: 30px; }
-                .record { margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #eee; }
-                .time { font-size: 13px; font-weight: bold; margin-bottom: 8px; }
-                .en { font-size: 12px; color: #666; margin: 5px 0; }
-                .zh { font-size: 14px; margin: 5px 0; }
-            </style>
-        </head>
-        <body>
-            <h1>SimulCast 翻译记录</h1>
-            <p class="date">${new Date().toLocaleString('zh-CN')}</p>
-    `;
-
-    selected.forEach((item, i) => {
-        html += `
-            <div class="record">
-                <p class="time">[${i + 1}] ${formatTime(item.time)}</p>
-                ${item.en ? `<p class="en">EN: ${escapeHtml(item.en)}</p>` : ''}
-                <p class="zh">ZH: ${escapeHtml(item.zh)}</p>
+    // 创建隐藏的渲染容器
+    const container = document.createElement('div');
+    container.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;padding:40px;background:white;font-family:"Noto Sans SC","Microsoft YaHei",sans-serif;color:#333;';
+    container.innerHTML = `
+        <h1 style="text-align:center;font-size:24px;margin-bottom:5px;">SimulCast 翻译记录</h1>
+        <p style="text-align:center;font-size:12px;color:#888;margin-bottom:30px;">${new Date().toLocaleString('zh-CN')}</p>
+        ${selected.map((item, i) => `
+            <div style="margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid #eee;">
+                <p style="font-size:13px;font-weight:bold;margin-bottom:8px;">[${i + 1}] ${formatTime(item.time)}</p>
+                ${item.en ? `<p style="font-size:12px;color:#666;margin:5px 0;">EN: ${escapeHtml(item.en)}</p>` : ''}
+                <p style="font-size:14px;margin:5px 0;">ZH: ${escapeHtml(item.zh)}</p>
             </div>
-        `;
+        `).join('')}
+    `;
+    document.body.appendChild(container);
+
+    // 使用 html2canvas 渲染
+    html2canvas(container, { scale: 2, useCORS: true }).then(canvas => {
+        document.body.removeChild(container);
+
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const imgData = canvas.toDataURL('image/png');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+        pdf.save(`simulcast_${new Date().toISOString().slice(0, 10)}.pdf`);
     });
-
-    html += '</body></html>';
-
-    // 打开新窗口并打印
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(html);
-    printWindow.document.close();
-    printWindow.onload = () => {
-        printWindow.print();
-    };
 }
 
 // 全选/取消全选
