@@ -7,6 +7,7 @@
 SimulCast 是一款浏览器端的 AI 同声传译工具，帮助用户实时理解外语演讲、技术分享和国际会议内容。
 
 **核心特性：**
+
 - 🎬 **视频搬运模式**：捕获浏览器标签页的视频+音频，搬到我们的页面上显示
 - 🌐 **端到端实时翻译**：使用阿里云百炼 LiveTranslate，语音直接翻译成中文
 - ✨ **智能纠错**：自动检测并修正之前识别/翻译的错误
@@ -58,6 +59,7 @@ python main.py
 **尝试原因**：零依赖，浏览器原生支持
 
 **遇到的问题**：
+
 - 识别准确率低，特别是专业术语
 - 不支持流式输出，必须说完一句话才能识别
 - 无法控制识别模型，纠错能力差
@@ -69,6 +71,7 @@ python main.py
 **尝试原因**：Whisper 识别准确率高，Groq 速度快
 
 **遇到的问题**：
+
 - 需要先录音 → 上传 → 识别 → 翻译，延迟高（3-5秒）
 - 音频格式转换复杂（webm → wav）
 - 两步处理（ASR + MT）误差累积
@@ -78,12 +81,14 @@ python main.py
 #### 方案三：阿里云百炼 LiveTranslate（最终方案）
 
 **选择原因**：
+
 - 端到端模型：语音直接翻译，无需中间步骤
 - 流式输出：逐字显示，延迟约 1 秒
 - 内置纠错：自动修正之前的翻译错误
 - WebSocket 协议：实时双向通信
 
 **原创设计**：
+
 - 使用 `modalities: ["text", "audio"]` 配置获取流式文本
 - 监听 `response.audio_transcript.text` 事件实现逐字显示
 - 通过 `conversation.item.input_audio_transcription.text` 获取英文原文
@@ -92,29 +97,34 @@ python main.py
 
 #### 问题：如何让用户同时看到视频和字幕？
 
-**方案 A：弹窗模式（其他参赛者常用）**
+**方案 A：弹窗模式**
+
 - 打开新窗口显示字幕
 - 问题：窗口边框不美观，需要手动调整位置
 
 **方案 B：画中画模式**
+
 - 使用 Document PiP API
 - 问题：浏览器兼容性差，样式不可控
 
 **方案 C：视频搬运模式（最终方案）**
+
 - 使用 `getDisplayMedia` 捕获视频+音频
 - 视频搬到我们的页面，字幕叠在下面
 - 优点：一体化体验，样式完全可控
 
 **原创设计**：
+
 - `videoPlayer.muted = true` 避免双重声音
 - 字幕使用 `getLastSentence()` 只显示当前句子，不堆叠
-- 参考 Babelfish Chrome 扩展的毛玻璃字幕样式
+- 毛玻璃字幕样式（blur + 半透明底色，不遮挡视频内容）
 
 ### 智能纠错实现
 
 **问题**：语音识别可能出错，如何让用户知道已修正？
 
 **解决方案**：
+
 - LiveTranslate 返回 `corrected` 类型时，字幕闪烁提示
 - 前端通过比较 `final` 和上一次翻译结果判断是否修正
 - 使用 CSS 动画实现平滑的修正提示
@@ -124,23 +134,25 @@ python main.py
 **技术选择**：Web Audio API + ScriptProcessorNode
 
 **为什么不用 MediaRecorder**：
+
 - MediaRecorder 输出 webm 格式，需要转码
 - ScriptProcessorNode 直接输出 PCM16，LiveTranslate 直接支持
 
 **原创设计**：
+
 - `AudioContext({ sampleRate: 16000 })` 匹配 LiveTranslate 要求
 - 1024 样本块（64ms），平衡延迟和性能
 - Float32 → Int16 转换，使用 DataView 实现
 
 ## 📦 依赖列表
 
-| 依赖 | 版本 | 用途 |
-|------|------|------|
-| fastapi | >=0.115.0 | Web 框架 |
-| uvicorn | >=0.30.0 | ASGI 服务器 |
-| websockets | >=12.0 | WebSocket 支持 |
-| websocket-client | >=1.6.0 | DashScope WebSocket 客户端 |
-| python-dotenv | >=1.0.0 | 环境变量管理 |
+| 依赖             | 版本      | 用途                       |
+| ---------------- | --------- | -------------------------- |
+| fastapi          | >=0.115.0 | Web 框架                   |
+| uvicorn          | >=0.30.0  | ASGI 服务器                |
+| websockets       | >=12.0    | WebSocket 支持             |
+| websocket-client | >=1.6.0   | DashScope WebSocket 客户端 |
+| python-dotenv    | >=1.0.0   | 环境变量管理               |
 
 ## 🏗️ 架构设计
 
@@ -186,14 +198,14 @@ python main.py
 
 ### 核心模块
 
-| 文件 | 说明 |
-|------|------|
-| `main.py` | FastAPI 服务器，WebSocket 端点 |
+| 文件                 | 说明                           |
+| -------------------- | ------------------------------ |
+| `main.py`            | FastAPI 服务器，WebSocket 端点 |
 | `translator_live.py` | LiveTranslate WebSocket 客户端 |
-| `static/index.html` | 主页面（视频+字幕） |
-| `static/app.js` | 前端逻辑（音频采集、字幕渲染） |
-| `static/style.css` | 样式（Babelfish 风格毛玻璃） |
-| `config.py` | 配置管理 |
+| `static/index.html`  | 主页面（视频+字幕）            |
+| `static/app.js`      | 前端逻辑（音频采集、字幕渲染） |
+| `static/style.css`   | 样式（Babelfish 风格毛玻璃）   |
+| `config.py`          | 配置管理                       |
 
 ## 🎯 功能说明
 
@@ -232,22 +244,26 @@ python main.py
 ## 📝 开发记录
 
 ### PR 1: 项目初始化
+
 - 创建项目结构
 - 实现基础 UI
 - 配置开发环境
 
 ### PR 2: 接入 LiveTranslate
+
 - 接入阿里云百炼 LiveTranslate API
 - 实现 WebSocket 连接
 - 处理流式翻译结果
 
 ### PR 3: 视频搬运 + 字幕一体化
+
 - 实现 getDisplayMedia 视频捕获
 - 视频搬到本页面显示
 - 字幕叠加在视频上
 - Babelfish 风格毛玻璃效果
 
 ### PR 4: 字幕优化 + 安全修复
+
 - 移除历史字幕，只显示当前句子
 - 只显示中文翻译
 - 修复路径遍历漏洞
