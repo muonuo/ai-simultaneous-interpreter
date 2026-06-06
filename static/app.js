@@ -168,19 +168,28 @@ function renderLiveTranscript() {
     const fullEn = sessionEn.join(' ');
     const fullZh = sessionZh.join('。');
 
-    // 当前正在翻译的句子（interim）
-    const pendingEn = (sessionEn.length === 0 || sessionEn[sessionEn.length - 1] !== currentEn) ? currentEn : '';
-    const pendingZh = (sessionZh.length === 0 || sessionZh[sessionZh.length - 1] !== currentZh) ? currentZh : '';
+    // 当前正在翻译的句子（interim）- 取最新的
+    const pendingEn = currentEn;
+    const pendingZh = currentZh;
 
     // 如果完全没有内容，不显示
-    if (!fullZh && !pendingZh) {
+    if (!fullEn && !fullZh && !pendingEn && !pendingZh) {
         const existing = list.querySelector('.history-item.live');
         if (existing) existing.remove();
         return;
     }
 
-    const displayEn = fullEn + (pendingEn ? (fullEn ? ' ' : '') + pendingEn : '');
-    const displayZh = fullZh + (pendingZh ? (fullZh ? '' : '') + pendingZh : '');
+    // 英文：已确认 + 当前（去重）
+    let displayEn = fullEn;
+    if (pendingEn && pendingEn !== fullEn) {
+        displayEn = fullEn ? fullEn + ' ' + pendingEn : pendingEn;
+    }
+
+    // 中文：已确认 + 当前（去重）
+    let displayZh = fullZh;
+    if (pendingZh && !fullZh.endsWith(pendingZh)) {
+        displayZh = fullZh + pendingZh;
+    }
 
     const liveHtml = `
         <div class="history-item live">
