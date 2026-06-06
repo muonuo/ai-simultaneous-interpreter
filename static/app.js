@@ -40,8 +40,9 @@ const D = {
 // ============================================================
 // 字幕逻辑
 // ============================================================
-const FADE_AFTER_MS = 5000;   // 5秒无活动 → 隐藏
-const MAX_LEN       = 120;    // 中文字符宽，120个足够
+const FADE_AFTER_MS = 8000;   // 8秒无活动 → 隐藏
+const MAX_LEN       = 100;    // 单句最大长度
+const MAX_LINES     = 2;      // 最多显示2行
 const MAX_HISTORY   = 100;    // 最多保存100条历史
 
 let fadeTimer = null;
@@ -56,8 +57,8 @@ function handleDelta(enText, zhText, type) {
     if (enText) currentEn = enText;
     if (zhText) currentZh = zhText;
 
-    // 显示中文
-    const display = getLastSentence(zhText || currentZh);
+    // 显示中文（取最后2句）
+    const display = getRecentSentences(zhText || currentZh);
     D.subTarget.textContent = display;
 
     if (type === 'interim') {
@@ -75,18 +76,27 @@ function handleDelta(enText, zhText, type) {
     }
 }
 
-// 只取最后一句（按句号/问号/感叹号分割）
-function getLastSentence(text) {
+// 取最后2句话，限制总长度
+function getRecentSentences(text) {
     if (!text) return '';
+    // 按句号分割
     const parts = text.split(/[。！？!?\n]+/).filter(s => s.trim());
-    const last = parts.length > 0 ? parts[parts.length - 1].trim() : text.trim();
-    if (last.length > MAX_LEN) return '...' + last.slice(last.length - MAX_LEN);
-    return last;
+
+    // 取最后2句
+    const recent = parts.slice(-MAX_LINES);
+    let result = recent.join('。');
+
+    // 限制总长度
+    if (result.length > MAX_LEN * MAX_LINES) {
+        result = '...' + result.slice(-(MAX_LEN * MAX_LINES));
+    }
+
+    return result;
 }
 
 function resetTimers() {
     if (fadeTimer) clearTimeout(fadeTimer);
-    // 5秒无活动 → 隐藏字幕
+    // 8秒无活动 → 隐藏字幕
     fadeTimer = setTimeout(() => {
         D.overlay.classList.remove('visible');
         D.subTarget.textContent = '';
