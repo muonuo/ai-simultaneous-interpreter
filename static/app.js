@@ -73,15 +73,17 @@ function handleDelta(enText, zhText, type) {
             D.overlay.classList.add('corrected');
             setTimeout(() => D.overlay.classList.remove('corrected'), 500);
         }
-        // final 时累积到会话记录并更新实时转录
+        // final 时累积到会话记录
         if (type === 'final' && currentZh) {
             if (sessionZh.length === 0 || sessionZh[sessionZh.length - 1] !== currentZh) {
                 sessionEn.push(currentEn);
                 sessionZh.push(currentZh);
-                renderLiveTranscript();
             }
         }
     }
+
+    // 每次都更新实时转录（包括 interim），实现流式效果
+    renderLiveTranscript();
 }
 
 // 取最后2句话，限制总长度
@@ -151,26 +153,41 @@ function clearHistory() {
     renderHistory();
 }
 
-// 实时转录：翻译中直接显示 session 累积内容
+// 实时转录：翻译中直接显示 session 累积内容 + 当前正在翻译的句子
 function renderLiveTranscript() {
     const list = document.getElementById('history-list');
     if (!list) return;
 
-    // 如果没有在翻译或没有内容，移除实时转录
-    if (!S.isTranslating || sessionZh.length === 0) {
+    if (!S.isTranslating) {
         const existing = list.querySelector('.history-item.live');
         if (existing) existing.remove();
         return;
     }
 
+    // 已确认的句子
     const fullEn = sessionEn.join(' ');
     const fullZh = sessionZh.join('。');
+
+    // 当前正在翻译的句子（interim）
+    const pendingEn = (sessionEn.length === 0 || sessionEn[sessionEn.length - 1] !== currentEn) ? currentEn : '';
+    const pendingZh = (sessionZh.length === 0 || sessionZh[sessionZh.length - 1] !== currentZh) ? currentZh : '';
+
+    // 如果完全没有内容，不显示
+    if (!fullZh && !pendingZh) {
+        const existing = list.querySelector('.history-item.live');
+        if (existing) existing.remove();
+        return;
+    }
+
+    const displayEn = fullEn + (pendingEn ? (fullEn ? ' ' : '') + pendingEn : '');
+    const displayZh = fullZh + (pendingZh ? (fullZh ? '' : '') + pendingZh : '');
+
     const liveHtml = `
         <div class="history-item live">
             <div class="history-content">
                 <div class="h-live-badge">● 翻译中</div>
-                ${fullEn ? `<div class="h-en">${escapeHtml(fullEn)}</div>` : ''}
-                <div class="h-zh">${escapeHtml(fullZh)}</div>
+                ${displayEn ? `<div class="h-en">${escapeHtml(displayEn)}</div>` : ''}
+                <div class="h-zh">${escapeHtml(displayZh)}</div>
             </div>
         </div>
     `;
