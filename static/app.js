@@ -97,6 +97,8 @@ function clearSubtitle() {
     D.subTarget.textContent = '';
     D.overlay.classList.remove('visible');
     if (fadeTimer) clearTimeout(fadeTimer);
+    currentEn = '';
+    currentZh = '';
 }
 
 // ============================================================
@@ -347,6 +349,11 @@ async function startTranslation() {
 }
 
 function stopTranslation() {
+    // 停止前保存当前句子到历史记录
+    if (currentZh) {
+        saveToHistory(currentEn, currentZh);
+    }
+
     S.isTranslating = false;
     stopCapture();
     disconnectWS();
