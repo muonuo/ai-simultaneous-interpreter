@@ -47,6 +47,91 @@ python main.py
 
 打开浏览器访问 http://127.0.0.1:8000
 
+## 💡 设计思路与原创点
+
+### 技术选型过程
+
+在开发过程中，我尝试了多种方案，最终选择了当前的架构：
+
+#### 方案一：Web Speech API（浏览器内置）
+
+**尝试原因**：零依赖，浏览器原生支持
+
+**遇到的问题**：
+- 识别准确率低，特别是专业术语
+- 不支持流式输出，必须说完一句话才能识别
+- 无法控制识别模型，纠错能力差
+
+**结论**：放弃，无法满足实时翻译需求
+
+#### 方案二：Groq Whisper + LLM 翻译
+
+**尝试原因**：Whisper 识别准确率高，Groq 速度快
+
+**遇到的问题**：
+- 需要先录音 → 上传 → 识别 → 翻译，延迟高（3-5秒）
+- 音频格式转换复杂（webm → wav）
+- 两步处理（ASR + MT）误差累积
+
+**结论**：延迟太高，不适合实时场景
+
+#### 方案三：阿里云百炼 LiveTranslate（最终方案）
+
+**选择原因**：
+- 端到端模型：语音直接翻译，无需中间步骤
+- 流式输出：逐字显示，延迟约 1 秒
+- 内置纠错：自动修正之前的翻译错误
+- WebSocket 协议：实时双向通信
+
+**原创设计**：
+- 使用 `modalities: ["text", "audio"]` 配置获取流式文本
+- 监听 `response.audio_transcript.text` 事件实现逐字显示
+- 通过 `conversation.item.input_audio_transcription.text` 获取英文原文
+
+### UI 设计思路
+
+#### 问题：如何让用户同时看到视频和字幕？
+
+**方案 A：弹窗模式（其他参赛者常用）**
+- 打开新窗口显示字幕
+- 问题：窗口边框不美观，需要手动调整位置
+
+**方案 B：画中画模式**
+- 使用 Document PiP API
+- 问题：浏览器兼容性差，样式不可控
+
+**方案 C：视频搬运模式（最终方案）**
+- 使用 `getDisplayMedia` 捕获视频+音频
+- 视频搬到我们的页面，字幕叠在下面
+- 优点：一体化体验，样式完全可控
+
+**原创设计**：
+- `videoPlayer.muted = true` 避免双重声音
+- 字幕使用 `getLastSentence()` 只显示当前句子，不堆叠
+- 参考 Babelfish Chrome 扩展的毛玻璃字幕样式
+
+### 智能纠错实现
+
+**问题**：语音识别可能出错，如何让用户知道已修正？
+
+**解决方案**：
+- LiveTranslate 返回 `corrected` 类型时，字幕闪烁提示
+- 前端通过比较 `final` 和上一次翻译结果判断是否修正
+- 使用 CSS 动画实现平滑的修正提示
+
+### 前端音频采集
+
+**技术选择**：Web Audio API + ScriptProcessorNode
+
+**为什么不用 MediaRecorder**：
+- MediaRecorder 输出 webm 格式，需要转码
+- ScriptProcessorNode 直接输出 PCM16，LiveTranslate 直接支持
+
+**原创设计**：
+- `AudioContext({ sampleRate: 16000 })` 匹配 LiveTranslate 要求
+- 1024 样本块（64ms），平衡延迟和性能
+- Float32 → Int16 转换，使用 DataView 实现
+
 ## 📦 依赖列表
 
 | 依赖 | 版本 | 用途 |
