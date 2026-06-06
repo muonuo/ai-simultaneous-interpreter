@@ -4,199 +4,205 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SimulCast 字幕</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        /* ============================================
+           Babelfish 风格：毛玻璃悬浮字幕条
+           ============================================ */
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
-        :root {
-            --font-sans: 'Inter', 'Noto Sans SC', -apple-system, sans-serif;
-        }
-
-        body {
-            font-family: var(--font-sans);
-            background: rgba(0, 0, 0, 0.85);
+        html, body {
+            font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Noto Sans SC', 'Helvetica Neue', sans-serif;
+            background: transparent;
             color: #fff;
             overflow: hidden;
             user-select: none;
             -webkit-user-select: none;
+            width: 100vw;
             height: 100vh;
-            display: flex;
-            flex-direction: column;
-            justify-content: flex-end;
-            padding: 12px 16px;
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
         }
 
-        .subtitle-container {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
+        /* ── 悬浮字幕容器 ── */
+        .overlay {
+            position: fixed;
+            left: 0; right: 0; bottom: 32px;
+            margin: 0 auto;
+            max-width: min(80vw, 1100px);
+            width: fit-content;
+            padding: 14px 26px;
+            background: rgba(15, 17, 22, 0.82);
+            backdrop-filter: blur(22px) saturate(140%);
+            -webkit-backdrop-filter: blur(22px) saturate(140%);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            box-shadow: 0 16px 50px rgba(0, 0, 0, 0.45);
+            text-align: center;
+            /* 默认隐藏，有内容时显示 */
+            opacity: 0;
+            transform: translateY(8px);
+            transition: opacity 0.35s ease, transform 0.35s ease;
+            pointer-events: none;
         }
 
-        .subtitle-row {
-            display: flex;
-            align-items: flex-start;
-            gap: 10px;
-            line-height: 1.4;
-        }
-
-        .subtitle-tag {
-            flex-shrink: 0;
-            font-size: 10px;
-            font-weight: 600;
-            padding: 1px 6px;
-            border-radius: 3px;
-            letter-spacing: 0.5px;
-            margin-top: 3px;
-            opacity: 0.8;
-        }
-
-        .tag-en { background: rgba(79, 143, 255, 0.3); color: #4f8fff; }
-        .tag-zh { background: rgba(52, 211, 153, 0.3); color: #34d399; }
-
-        .subtitle-text {
-            flex: 1;
-            font-size: 20px;
-            font-weight: 500;
-            letter-spacing: -0.2px;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.6);
-            min-height: 24px;
-            word-break: break-word;
-        }
-
-        .subtitle-text.zh {
-            font-size: 22px;
-            font-weight: 600;
-        }
-
-        .placeholder {
-            opacity: 0.3;
-            font-weight: 400;
-            font-style: italic;
-        }
-
-        .segment {
-            display: inline;
-            margin-right: 4px;
-            transition: opacity 0.2s;
-        }
-
-        .segment.interim {
-            opacity: 0.5;
-            font-style: italic;
-        }
-
-        .segment.final {
+        .overlay.visible {
             opacity: 1;
-            font-style: normal;
+            transform: translateY(0);
         }
 
-        .segment.corrected {
-            animation: flash 0.5s ease;
+        /* ── 英文原文（小字，半透明） ── */
+        .overlay__source {
+            font-size: 14px;
+            font-weight: 400;
+            color: rgba(255, 255, 255, 0.6);
+            line-height: 1.4;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+            margin-bottom: 2px;
+            min-height: 0;
         }
 
-        @keyframes flash {
-            0% { background: rgba(79, 143, 255, 0.4); border-radius: 3px; }
-            100% { background: transparent; }
+        .overlay__source:empty {
+            display: none;
         }
 
-        /* 大字模式 */
-        .font-large .subtitle-text { font-size: 26px; }
-        .font-large .subtitle-text.zh { font-size: 28px; }
+        /* ── 中文翻译（大字，纯白粗体） ── */
+        .overlay__target {
+            font-size: 24px;
+            font-weight: 600;
+            color: #ffffff;
+            line-height: 1.35;
+            letter-spacing: 0.2px;
+            text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+            min-height: 0;
+        }
 
-        /* 叠加模式 */
-        .mode-overlay body {
-            background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.4) 60%, transparent 100%);
+        .overlay__target:empty {
+            display: none;
+        }
+
+        /* ── interim 半透明 ── */
+        .overlay__source.interim { opacity: 0.45; }
+        .overlay__target.interim { opacity: 0.45; }
+
+        /* ── 占位符 ── */
+        .overlay__target[data-state="connecting"]::before {
+            content: '正在连接...';
+            opacity: 0.6;
+        }
+
+        /* ── 纠错闪烁 ── */
+        .overlay.corrected {
+            animation: flash-correct 0.5s ease;
+        }
+
+        @keyframes flash-correct {
+            0%   { border-color: rgba(91, 140, 255, 0.5); }
+            100% { border-color: rgba(255, 255, 255, 0.08); }
         }
     </style>
 </head>
 <body>
-    <div class="subtitle-container">
-        <div class="subtitle-row" id="en-row">
-            <span class="subtitle-tag tag-en">EN</span>
-            <div class="subtitle-text" id="en-text">
-                <span class="placeholder">等待语音输入...</span>
-            </div>
-        </div>
-        <div class="subtitle-row" id="zh-row">
-            <span class="subtitle-tag tag-zh">中</span>
-            <div class="subtitle-text zh" id="zh-text">
-                <span class="placeholder">翻译将在此显示</span>
-            </div>
-        </div>
+    <div class="overlay" id="overlay">
+        <div class="overlay__source" id="source"></div>
+        <div class="overlay__target" id="target"></div>
     </div>
 
     <script>
-        /**
-         * 画中画字幕窗口 — 接收主页面广播的翻译结果
-         */
+        const overlay = document.getElementById('overlay');
+        const source  = document.getElementById('source');
+        const target  = document.getElementById('target');
 
-        const enText = document.getElementById('en-text');
-        const zhText = document.getElementById('zh-text');
-        const container = document.querySelector('.subtitle-container');
+        // ── 常量（与 Babelfish 一致） ──
+        const SEGMENT_GAP_MS = 1500;   // 1.5 秒无新内容 → 清空字幕
+        const FADE_AFTER_MS  = 6000;   // 6 秒无活动 → 隐藏 overlay
+        const MAX_LEN        = 240;    // 最大字符数
 
-        let settings = { fontSize: 'medium', mode: 'bottom' };
+        // ── 状态 ──
+        let sourceText = '';
+        let targetText = '';
+        let segmentTimer = null;
+        let fadeTimer    = null;
 
-        // 监听主页面设置
+        // ── 监听设置 ──
         const bcSettings = new BroadcastChannel('simulcast-settings');
         bcSettings.onmessage = (e) => {
-            settings = { ...settings, ...e.data };
-            document.documentElement.className = '';
-            if (settings.fontSize !== 'medium') {
-                document.documentElement.classList.add(`font-${settings.fontSize}`);
-            }
-            if (settings.mode === 'overlay') {
-                document.documentElement.classList.add('mode-overlay');
-            }
+            // 预留：字号等设置
         };
 
-        // 监听翻译结果
+        // ── 监听翻译结果 ──
         const bcTranslate = new BroadcastChannel('simulcast-translate');
         bcTranslate.onmessage = (e) => {
             const { en_text, zh_text, type } = e.data;
-            if (en_text) appendSegment(enText, en_text, type);
-            if (zh_text) appendSegment(zhText, zh_text, type);
+            if (en_text) handleDelta('en', en_text, type);
+            if (zh_text) handleDelta('zh', zh_text, type);
         };
 
-        function appendSegment(el, text, type) {
-            const placeholder = el.querySelector('.placeholder');
-            if (placeholder) placeholder.remove();
+        function handleDelta(lang, text, type) {
+            // 显示 overlay
+            overlay.classList.add('visible');
 
-            if (type === 'final') {
-                const interim = el.querySelector('.segment.interim');
-                if (interim) {
-                    interim.textContent = text;
-                    interim.classList.remove('interim');
-                    interim.classList.add('final');
-                    return;
-                }
-                const seg = document.createElement('span');
-                seg.className = 'segment final';
-                seg.textContent = text;
-                el.appendChild(seg);
-            } else if (type === 'corrected') {
-                const finals = el.querySelectorAll('.segment.final');
-                const last = finals[finals.length - 1];
-                if (last) {
-                    last.textContent = text;
-                    last.classList.add('corrected');
-                    setTimeout(() => last.classList.remove('corrected'), 500);
+            // 重置定时器
+            resetTimers();
+
+            if (lang === 'en') {
+                if (type === 'interim') {
+                    sourceText = text;
+                    source.textContent = trim(sourceText);
+                    source.classList.add('interim');
+                } else if (type === 'final' || type === 'corrected') {
+                    sourceText = text;
+                    source.textContent = trim(sourceText);
+                    source.classList.remove('interim');
                 }
             } else {
-                let interim = el.querySelector('.segment.interim');
-                if (!interim) {
-                    interim = document.createElement('span');
-                    interim.className = 'segment interim';
-                    el.appendChild(interim);
+                if (type === 'interim') {
+                    targetText = text;
+                    target.textContent = trim(targetText);
+                    target.classList.add('interim');
+                    target.removeAttribute('data-state');
+                } else if (type === 'final') {
+                    targetText = text;
+                    target.textContent = trim(targetText);
+                    target.classList.remove('interim');
+                    target.removeAttribute('data-state');
+                } else if (type === 'corrected') {
+                    targetText = text;
+                    target.textContent = trim(targetText);
+                    target.classList.remove('interim');
+                    target.removeAttribute('data-state');
+                    overlay.classList.add('corrected');
+                    setTimeout(() => overlay.classList.remove('corrected'), 500);
                 }
-                interim.textContent = text;
             }
         }
 
-        console.log('SimulCast 字幕窗口已就绪');
+        function trim(text) {
+            if (text.length > MAX_LEN) return '...' + text.slice(text.length - MAX_LEN);
+            return text;
+        }
+
+        function resetTimers() {
+            // 清除旧定时器
+            if (segmentTimer) clearTimeout(segmentTimer);
+            if (fadeTimer) clearTimeout(fadeTimer);
+
+            // 1.5 秒无新内容 → 清空字幕
+            segmentTimer = setTimeout(() => {
+                sourceText = '';
+                targetText = '';
+                source.textContent = '';
+                target.textContent = '';
+                target.setAttribute('data-state', 'connecting');
+            }, SEGMENT_GAP_MS);
+
+            // 6 秒无活动 → 隐藏 overlay
+            fadeTimer = setTimeout(() => {
+                overlay.classList.remove('visible');
+            }, FADE_AFTER_MS);
+        }
+
+        // 初始化：显示 connecting 状态
+        target.setAttribute('data-state', 'connecting');
+
+        console.log('SimulCast 悬浮字幕已就绪（Babelfish 风格）');
     </script>
 </body>
 </html>

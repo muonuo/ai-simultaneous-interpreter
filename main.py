@@ -1,19 +1,23 @@
-"""
+﻿"""
 AI 同声传译助手 - FastAPI 服务入口
+
+数据流: 浏览器 PCM16 音频 → WebSocket → LiveTranslate → 流式翻译 → 字幕窗口
 """
 
+import base64
 from pathlib import Path
 import json
 import asyncio
+from dotenv import load_dotenv
+
+load_dotenv()  # 最先加载 .env，确保所有模块能读到 API Key
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 
-from config import config
-from translator import translate_text, add_to_history, get_recent_history
-from translator_live import get_translator
+from translator_live import LiveTranslator
 
-app = FastAPI(title="AI 同声传译助手", version="0.1.0")
+app = FastAPI(title="AI 同声传译助手", version="0.2.0")
 
 # 静态文件目录
 static_dir = Path(__file__).parent / "static"
@@ -31,89 +35,70 @@ async def pip_page() -> FileResponse:
     return FileResponse(static_dir / "pip.html")
 
 
-
-# 缓存上一轮的 interim 翻译（用于自动纠错）
-_interim_translations: dict[str, str] = {}
-
-
 @app.websocket("/ws/translate")
 async def websocket_translate(websocket: WebSocket) -> None:
     """
     翻译 WebSocket 端点
-    支持两种消息类型：
-    1. 文本 (JSON): 直接翻译文本
-    2. 二进制: 音频数据 → STT 转写 → 翻译
 
-    返回（JSON）:
-    {"en_text": "...", "zh_text": "...", "type": "final"|"interim"|"corrected"}
+    接收: {"audio": "<base64_pcm16>"}
+    返回: {"en_text": "...", "zh_text": "...", "type": "interim"|"final"|"corrected"}
     """
     await websocket.accept()
+    loop = asyncio.get_running_loop()
+    last_zh = ""
 
-    # 翻译结果回调 → 直接推送到前端
-    def on_translation(en_text: str, zh_text: str):
-        asyncio.create_task(
+    # LiveTranslate 回调 — 从 websocket-client 线程安全调度到 asyncio
+    def on_result(en_text: str, zh_text: str, msg_type: str = "final"):
+        nonlocal last_zh
+        actual_type = msg_type
+
+        # 纠错逻辑：如果 final 翻译和上一次不同，标记为 corrected
+        if msg_type == "final" and zh_text:
+            if last_zh and last_zh != zh_text:
+                actual_type = "corrected"
+            last_zh = zh_text
+
+        # 线程安全：从 LiveTranslate 线程调度到 asyncio 事件循环
+        loop.call_soon_threadsafe(
+            asyncio.create_task,
             websocket.send_text(json.dumps({
-                "en_text": en_text, "zh_text": zh_text, "type": "final",
+                "en_text": en_text,
+                "zh_text": zh_text,
+                "type": actual_type,
             }, ensure_ascii=False))
         )
 
-    translator = get_translator(on_result=on_translation)
+    # 每个连接创建独立的 LiveTranslator 实例
+    translator = LiveTranslator()
+    translator.connect(on_result=on_result)
 
     try:
         while True:
             raw = await websocket.receive()
 
-            if "text" in raw:
-                msg_data = raw["text"]
-                try:
-                    msg = json.loads(msg_data)
-                except json.JSONDecodeError:
-                    continue
+            # 客户端断开连接
+            if raw.get("type") == "websocket.disconnect":
+                break
 
-                # 音频消息 (base64)
-                if "audio" in msg:
-                    translator.send_audio(msg["audio"])
-                    continue
-
-                # 文本翻译消息
-                text = msg.get("text", "").strip()
-                if not text:
-                    continue
-                msg_type = msg.get("type", "final")
-                target_lang = msg.get("target_lang", "zh")
-
-            else:
+            if "text" not in raw:
                 continue
 
-            # 调用七牛云 LLM 翻译
-            history = get_recent_history()
-            zh_text = await translate_text(
-                text, msg_type=msg_type, target_lang=target_lang,
-                history=history,
-            )
+            try:
+                msg = json.loads(raw["text"])
+            except json.JSONDecodeError:
+                continue
 
-            # 自动纠错
-            out_type = msg_type
-            if msg_type == "final":
-                prev = _interim_translations.pop(text[:60], None)
-                if prev and prev != zh_text:
-                    out_type = "corrected"
-
-            # 发送结果
-            await websocket.send_text(json.dumps({
-                "en_text": text,
-                "zh_text": zh_text,
-                "type": out_type,
-            }, ensure_ascii=False))
-
-            # 记录历史
-            if msg_type == "final" and zh_text:
-                add_to_history(text, zh_text)
+            # 音频消息: base64 PCM16 → 解码 → 发送到 LiveTranslate
+            if "audio" in msg:
+                audio_bytes = base64.b64decode(msg["audio"])
+                translator.send_audio(audio_bytes)
 
     except WebSocketDisconnect:
-        pass
+        print("[WS] 客户端断开连接")
+    except Exception as e:
+        print(f"[WS] 错误: {e}")
     finally:
-        _interim_translations.clear()
+        translator.close()
 
 
 # 静态文件（不使用 app.mount 避免 WebSocket 路由冲突）
@@ -124,3 +109,8 @@ async def static_files(filename: str):
     if file_path.exists() and file_path.is_file():
         return FileResponse(file_path)
     return FileResponse(static_dir / "index.html")
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8000)
