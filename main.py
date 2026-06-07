@@ -117,11 +117,6 @@ async def static_files(filename: str):
     return FileResponse(static_dir / "index.html")
 
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
-
-
 # ============================================================
 # 摘要生成接口
 # ============================================================
@@ -169,3 +164,8 @@ async def generate_summary(req: SummaryRequest):
 
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8000)

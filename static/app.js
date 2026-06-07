@@ -395,7 +395,7 @@ async function generateSummary(index) {
     // 调用 API 生成摘要
     btn.disabled = true;
     btn.textContent = '生成中...';
-    summaryEl.textContent = '正在生成摘要...';
+    summaryEl.innerHTML = '<span class="summary-loading">正在总结</span>';
     summaryEl.style.display = 'block';
 
     try {
