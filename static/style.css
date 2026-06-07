@@ -242,6 +242,80 @@ html, body {
     background: #000;
 }
 
+/* 视频控制条 */
+.video-controls {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: none;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    background: linear-gradient(transparent, rgba(0,0,0,0.8));
+    z-index: 50;
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.video-stage:hover .video-controls,
+.video-controls:hover {
+    opacity: 1;
+}
+
+.video-controls.visible {
+    display: flex;
+}
+
+.vc-btn {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 16px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 0.15s;
+    flex-shrink: 0;
+}
+
+.vc-btn:hover {
+    background: rgba(255,255,255,0.15);
+}
+
+.vc-progress-wrap {
+    flex: 1;
+    height: 4px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 2px;
+    cursor: pointer;
+    position: relative;
+}
+
+.vc-progress-wrap:hover {
+    height: 6px;
+}
+
+.vc-progress-bar {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    width: 0%;
+    transition: width 0.1s linear;
+}
+
+.vc-time {
+    font-size: 12px;
+    color: rgba(255,255,255,0.8);
+    white-space: nowrap;
+    min-width: 80px;
+    text-align: center;
+}
+
 /* ── 字幕覆盖层（毛玻璃） ── */
 .subtitle-overlay {
     position: absolute;
@@ -370,6 +444,75 @@ html, body {
 .start-btn:hover {
     transform: scale(1.05);
     box-shadow: 0 6px 30px rgba(79,143,255,0.4);
+}
+
+/* 本地文件选择 */
+.local-file-section {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 16px;
+    justify-content: center;
+}
+
+.local-file-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-dim);
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.local-file-btn:hover {
+    color: var(--text);
+    border-color: var(--accent);
+    background: var(--accent-dim);
+}
+
+.local-file-icon {
+    font-size: 16px;
+}
+
+.local-file-hint {
+    font-size: 12px;
+    color: var(--accent);
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.share-hints {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 20px;
+    padding: 16px 20px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+}
+
+.share-hint {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--text-dim);
+}
+
+.share-hint-icon {
+    font-size: 16px;
+    width: 24px;
+    text-align: center;
+    flex-shrink: 0;
 }
 
 .start-btn-icon {

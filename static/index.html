@@ -43,6 +43,15 @@
     <div class="video-stage" id="video-stage">
         <video id="video-player" autoplay playsinline></video>
 
+        <!-- 本地视频控制条 -->
+        <div class="video-controls" id="video-controls">
+            <button class="vc-btn" id="vc-play" title="播放/暂停">⏸</button>
+            <div class="vc-progress-wrap" id="vc-progress-wrap">
+                <div class="vc-progress-bar" id="vc-progress-bar"></div>
+            </div>
+            <span class="vc-time" id="vc-time">0:00 / 0:00</span>
+            <button class="vc-btn" id="vc-mute" title="静音">🔊</button>
+        </div>
 
         <!-- 字幕覆盖层（可拖拽 + 毛玻璃） -->
         <div class="subtitle-overlay" id="subtitle-overlay">
@@ -62,6 +71,24 @@
                 <span class="start-btn-icon">▶</span>
                 <span>开始翻译</span>
             </button>
+            <div class="local-file-section">
+                <label class="local-file-btn" for="local-file-input">
+                    <span class="local-file-icon">📂</span>
+                    <span>打开本地视频文件</span>
+                </label>
+                <input type="file" id="local-file-input" accept="video/*,audio/*" style="display:none">
+                <span class="local-file-hint" id="local-file-name"></span>
+            </div>
+            <div class="share-hints">
+                <div class="share-hint">
+                    <span class="share-hint-icon">🌐</span>
+                    <span>在线视频：直接点「开始翻译」，选择标签页共享</span>
+                </div>
+                <div class="share-hint">
+                    <span class="share-hint-icon">📁</span>
+                    <span>本地视频：先选择文件，再点「开始翻译」</span>
+                </div>
+            </div>
             <div class="lang-selector">
                 <label class="lang-label">源语言</label>
                 <select id="source-lang" class="lang-dropdown">

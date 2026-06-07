@@ -17,6 +17,7 @@ const S = {
     _audioCtx: null,
     _processor: null,
     _stream: null,
+    _localFileUrl: null,
 };
 
 // ============================================================
@@ -37,7 +38,117 @@ const D = {
     overlay:      document.getElementById('subtitle-overlay'),
     subSource:    document.getElementById('sub-source'),
     subTarget:    document.getElementById('sub-target'),
+    vcControls:   document.getElementById('video-controls'),
+    vcPlay:       document.getElementById('vc-play'),
+    vcProgress:   document.getElementById('vc-progress-wrap'),
+    vcBar:        document.getElementById('vc-progress-bar'),
+    vcTime:       document.getElementById('vc-time'),
+    vcMute:       document.getElementById('vc-mute'),
 };
+
+// ============================================================
+// 视频控制条
+// ============================================================
+function initVideoControls() {
+    // 播放/暂停
+    D.vcPlay.addEventListener('click', () => {
+        if (D.videoPlayer.paused) {
+            D.videoPlayer.play();
+            D.vcPlay.textContent = '⏸';
+        } else {
+            D.videoPlayer.pause();
+            D.vcPlay.textContent = '▶';
+        }
+    });
+
+    // 进度条更新
+    D.videoPlayer.addEventListener('timeupdate', () => {
+        if (!D.videoPlayer.duration) return;
+        const pct = (D.videoPlayer.currentTime / D.videoPlayer.duration) * 100;
+        D.vcBar.style.width = pct + '%';
+        D.vcTime.textContent = formatVideoTime(D.videoPlayer.currentTime) + ' / ' + formatVideoTime(D.videoPlayer.duration);
+    });
+
+    // 点击进度条跳转
+    D.vcProgress.addEventListener('click', (e) => {
+        if (!D.videoPlayer.duration) return;
+        const rect = D.vcProgress.getBoundingClientRect();
+        const pct = (e.clientX - rect.left) / rect.width;
+        D.videoPlayer.currentTime = pct * D.videoPlayer.duration;
+    });
+
+    // 拖动进度条
+    let isDragging = false;
+    D.vcProgress.addEventListener('mousedown', (e) => {
+        if (!D.videoPlayer.duration) return;
+        isDragging = true;
+        const rect = D.vcProgress.getBoundingClientRect();
+        const pct = (e.clientX - rect.left) / rect.width;
+        D.videoPlayer.currentTime = pct * D.videoPlayer.duration;
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isDragging || !D.videoPlayer.duration) return;
+        const rect = D.vcProgress.getBoundingClientRect();
+        const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        D.videoPlayer.currentTime = pct * D.videoPlayer.duration;
+    });
+
+    document.addEventListener('mouseup', () => {
+        isDragging = false;
+    });
+
+    // 拖动进度条后清空字幕
+    D.videoPlayer.addEventListener('seeked', () => {
+        if (!S.isTranslating || !S._localFileUrl) return;
+        clearSubtitle();
+        sessionEn.length = 0;
+        sessionZh.length = 0;
+        currentEn = '';
+        currentZh = '';
+    });
+
+    // 静音
+    D.vcMute.addEventListener('click', () => {
+        D.videoPlayer.muted = !D.videoPlayer.muted;
+        D.vcMute.textContent = D.videoPlayer.muted ? '🔇' : '🔊';
+    });
+
+    // 键盘快捷键
+    document.addEventListener('keydown', (e) => {
+        if (!S._localFileUrl) return;
+        if (e.code === 'Space') {
+            e.preventDefault();
+            D.vcPlay.click();
+        }
+        if (e.code === 'ArrowLeft') {
+            D.videoPlayer.currentTime = Math.max(0, D.videoPlayer.currentTime - 5);
+        }
+        if (e.code === 'ArrowRight') {
+            D.videoPlayer.currentTime = Math.min(D.videoPlayer.duration, D.videoPlayer.currentTime + 5);
+        }
+    });
+}
+
+function formatVideoTime(sec) {
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+function showVideoControls() {
+    D.vcControls.classList.add('visible');
+}
+
+function hideVideoControls() {
+    D.vcControls.classList.remove('visible');
+    D.vcBar.style.width = '0%';
+    D.vcTime.textContent = '0:00 / 0:00';
+    D.vcPlay.textContent = '⏸';
+    D.vcMute.textContent = '🔊';
+}
+
+initVideoControls();
 
 // ============================================================
 // 字幕逻辑
@@ -46,12 +157,16 @@ const FADE_AFTER_MS = 8000;   // 8秒无活动 → 隐藏
 const MAX_LEN       = 100;    // 单句最大长度
 const MAX_LINES     = 2;      // 最多显示2行
 const MAX_HISTORY   = 100;    // 最多保存100条历史
+const MAX_SESSION   = 5;      // 会话最多保留5句
 
 let fadeTimer = null;
 let currentEn = '';  // 当前英文句子
 let currentZh = '';  // 当前中文句子
 let sessionEn = [];  // 整个会话的英文句子
 let sessionZh = [];  // 整个会话的中文句子
+
+let lastDisplayTime = 0;
+const DISPLAY_THROTTLE = 50; // 50ms 节流，防止字幕跳动
 
 function handleDelta(enText, zhText, type) {
     D.overlay.classList.add('visible');
@@ -60,6 +175,13 @@ function handleDelta(enText, zhText, type) {
     // 更新当前句子
     if (enText) currentEn = enText;
     if (zhText) currentZh = zhText;
+
+    // 节流显示，防止网络抖动导致字幕跳动
+    const now = Date.now();
+    if (now - lastDisplayTime < DISPLAY_THROTTLE && type === 'interim') {
+        return; // interim 结果太频繁，跳过
+    }
+    lastDisplayTime = now;
 
     // 显示中文（取最后2句）
     const display = getRecentSentences(zhText || currentZh);
@@ -78,6 +200,11 @@ function handleDelta(enText, zhText, type) {
             if (sessionZh.length === 0 || sessionZh[sessionZh.length - 1] !== currentZh) {
                 sessionEn.push(currentEn);
                 sessionZh.push(currentZh);
+                // 超过上限时移除最早的句子
+                if (sessionEn.length > MAX_SESSION) {
+                    sessionEn.shift();
+                    sessionZh.shift();
+                }
             }
         }
     }
@@ -523,7 +650,14 @@ function stopCapture() {
         S._stream.getTracks().forEach(t => t.stop());
         S._stream = null;
     }
-    D.videoPlayer.srcObject = null;
+    if (S._localFileUrl) {
+        D.videoPlayer.pause();
+        D.videoPlayer.removeAttribute('src');
+        D.videoPlayer.load();
+    } else {
+        D.videoPlayer.srcObject = null;
+    }
+    hideVideoControls();
     D.videoStage.classList.remove('visible');
     D.guide.classList.remove('hidden');
     D.topbar.classList.remove('active');
@@ -532,11 +666,71 @@ function stopCapture() {
 // ============================================================
 // 翻译控制
 // ============================================================
+async function startLocalFile() {
+    try {
+        // 先显示视频区域
+        D.videoStage.classList.add('visible');
+        D.guide.classList.add('hidden');
+        D.topbar.classList.add('active');
+        showVideoControls();
+
+        // 设置视频源并等待加载
+        D.videoPlayer.src = S._localFileUrl;
+        D.videoPlayer.muted = false;
+
+        await new Promise((resolve, reject) => {
+            D.videoPlayer.oncanplay = () => {
+                D.videoPlayer.play();
+                resolve();
+            };
+            D.videoPlayer.onerror = () => reject(new Error('视频加载失败'));
+            setTimeout(() => reject(new Error('视频加载超时')), 10000);
+        });
+
+        // 使用视频元素的音频轨道
+        const audioCtx = new AudioContext({ sampleRate: 16000 });
+        const mediaStream = D.videoPlayer.captureStream();
+        const source = audioCtx.createMediaStreamSource(mediaStream);
+        const processor = audioCtx.createScriptProcessor(1024, 1, 1);
+
+        processor.onaudioprocess = (e) => {
+            if (!S.ws || S.ws.readyState !== WebSocket.OPEN) return;
+            const float32 = e.inputBuffer.getChannelData(0);
+            const int16 = new Int16Array(float32.length);
+            for (let i = 0; i < float32.length; i++) {
+                const s = Math.max(-1, Math.min(1, float32[i]));
+                int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            }
+            const bytes = new Uint8Array(int16.buffer);
+            let binary = '';
+            for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+            S.ws.send(JSON.stringify({ audio: btoa(binary) }));
+        };
+
+        source.connect(processor);
+        processor.connect(audioCtx.destination);
+
+        S._audioCtx = audioCtx;
+        S._processor = processor;
+        S._stream = null; // 没有 getDisplayMedia 的 stream
+
+        return true;
+    } catch (err) {
+        showToast(err.message || '本地文件加载失败', 'error');
+        return false;
+    }
+}
+
 async function startTranslation() {
     try { await connectWS(); }
     catch { return; }
 
-    const ok = await startCapture();
+    let ok;
+    if (S._localFileUrl) {
+        ok = await startLocalFile();
+    } else {
+        ok = await startCapture();
+    }
     if (!ok) { disconnectWS(); return; }
 
     D.subTarget.setAttribute('data-state', 'connecting');
@@ -561,6 +755,13 @@ function stopTranslation() {
     stopCapture();
     disconnectWS();
     clearSubtitle();
+
+    // 清理本地文件状态
+    if (S._localFileUrl) {
+        URL.revokeObjectURL(S._localFileUrl);
+        S._localFileUrl = null;
+        if (localFileName) localFileName.textContent = '';
+    }
 
     D.ctrlBtn.classList.remove('recording');
     D.ctrlIcon.textContent = '▶';
@@ -608,6 +809,20 @@ const sourceLangSelect = document.getElementById('source-lang');
 if (sourceLangSelect) {
     sourceLangSelect.addEventListener('change', (e) => {
         S.sourceLang = e.target.value;
+    });
+}
+
+// 本地文件选择
+const localFileInput = document.getElementById('local-file-input');
+const localFileName = document.getElementById('local-file-name');
+if (localFileInput) {
+    localFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (S._localFileUrl) URL.revokeObjectURL(S._localFileUrl);
+        S._localFileUrl = URL.createObjectURL(file);
+        localFileName.textContent = file.name;
+        localFileName.title = file.name;
     });
 }
 
@@ -701,4 +916,15 @@ if (sourceLangSelect) {
     }
 })();
 
+function showToast(msg, type) {
+    var el = document.createElement('div');
+    el.textContent = msg;
+    el.style.cssText = 'position:fixed;bottom:60px;left:50%;transform:translateX(-50%);padding:10px 24px;border-radius:10px;font-size:13px;z-index:200;transition:opacity 0.3s;background:rgba(0,0,0,0.85);color:#fff;max-width:90vw;text-align:center;';
+    if (type === 'error') el.style.border = '1px solid rgba(248,113,113,0.4)';
+    if (type === 'warning') el.style.border = '1px solid rgba(251,191,36,0.4)';
+    document.body.appendChild(el);
+    setTimeout(function() { el.style.opacity = '0'; setTimeout(function() { el.remove(); }, 300); }, 3000);
+}
+
 console.log('SimulCast 已就绪 | 视频搬运 + 字幕一体化 + 多语言支持');
+
