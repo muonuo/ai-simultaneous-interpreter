@@ -236,6 +236,14 @@ ai-simultaneous-interpreter/
 
 ---
 
+## 🖥️ 桌面端
+
+> 桌面端正在开发中，支持捕获系统声音（任意播放器、会议软件的音频）。
+
+👉 [SimulCast Desktop](https://github.com/muonuo/SimulCast-Desktop)
+
+---
+
 ## 📄 许可证
 
 MIT License — 详见 [LICENSE](LICENSE) 文件。
