@@ -135,7 +135,7 @@ async def generate_summary(req: SummaryRequest):
     try:
         import httpx
 
-        prompt = f"请用一句话概括以下翻译内容的核心意思（不超过50字）：\n\n{req.text}"
+        prompt = f"请用简洁的语言概括以下翻译内容的核心意思：\n\n{req.text}"
 
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(

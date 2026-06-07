@@ -37,7 +37,6 @@ const D = {
     videoStage:   document.getElementById('video-stage'),
     videoPlayer:  document.getElementById('video-player'),
     overlay:      document.getElementById('subtitle-overlay'),
-    subSource:    document.getElementById('sub-source'),
     subTarget:    document.getElementById('sub-target'),
     vcControls:   document.getElementById('video-controls'),
     vcPlay:       document.getElementById('vc-play'),
@@ -467,7 +466,7 @@ async function generateSummary(index) {
 
         const data = await resp.json();
         if (data.error) {
-            summaryEl.textContent = '生成失败: ' + data.error;
+            summaryEl.textContent = '⚠️ 生成失败：' + (data.error.includes('API') ? 'AI 服务暂时不可用，请稍后重试' : data.error);
         } else {
             summaryEl.textContent = data.summary;
             // 缓存摘要到历史记录
@@ -475,7 +474,7 @@ async function generateSummary(index) {
             localStorage.setItem('simulcast_history', JSON.stringify(history));
         }
     } catch (e) {
-        summaryEl.textContent = '生成失败，请重试';
+        summaryEl.textContent = '⚠️ 网络请求失败，请检查网络连接后重试';
     } finally {
         btn.disabled = false;
         btn.textContent = '📝 摘要';
@@ -688,7 +687,7 @@ function connectWS() {
 
         S.ws.onerror = () => {
             updateStatus('error', '连接错误');
-            reject(new Error('WebSocket 连接失败'));
+            reject(new Error('无法连接到服务器，请确认后端服务已启动（python main.py）'));
         };
     });
 }
@@ -754,7 +753,15 @@ async function startCapture() {
         return true;
     } catch (err) {
         if (err.name === 'AbortError') return false;
-        alert('捕获失败: ' + err.message);
+        let msg = '屏幕共享失败';
+        if (err.message.includes('音频轨道')) {
+            msg = '⚠️ 未检测到音频\n\n请在共享时勾选「共享标签页音频」选项，或选择一个正在播放声音的标签页。';
+        } else if (err.message.includes('Permission') || err.message.includes('NotAllowed')) {
+            msg = '⚠️ 权限被拒绝\n\n浏览器拒绝了屏幕共享请求，请允许共享后重试。';
+        } else {
+            msg = '⚠️ 共享失败：' + err.message;
+        }
+        showToast(msg, 'error');
         return false;
     }
 }
@@ -799,8 +806,8 @@ async function startLocalFile() {
                 D.videoPlayer.play();
                 resolve();
             };
-            D.videoPlayer.onerror = () => reject(new Error('视频加载失败'));
-            setTimeout(() => reject(new Error('视频加载超时')), 10000);
+            D.videoPlayer.onerror = () => reject(new Error('视频格式不支持或文件已损坏，请尝试其他格式（推荐 MP4）'));
+            setTimeout(() => reject(new Error('视频加载超时，文件可能过大或网络较慢')), 10000);
         });
 
         // 使用视频元素的音频轨道
@@ -839,7 +846,10 @@ async function startLocalFile() {
 
 async function startTranslation() {
     try { await connectWS(); }
-    catch { return; }
+    catch {
+        showToast('⚠️ 无法连接到服务器\n\n请确认后端服务已启动：在终端运行 python main.py', 'error');
+        return;
+    }
 
     let ok;
     if (S._localFileUrl) {
@@ -1033,13 +1043,46 @@ if (localFileInput) {
 })();
 
 function showToast(msg, type) {
-    var el = document.createElement('div');
-    el.textContent = msg;
-    el.style.cssText = 'position:fixed;bottom:60px;left:50%;transform:translateX(-50%);padding:10px 24px;border-radius:10px;font-size:13px;z-index:200;transition:opacity 0.3s;background:rgba(0,0,0,0.85);color:#fff;max-width:90vw;text-align:center;';
-    if (type === 'error') el.style.border = '1px solid rgba(248,113,113,0.4)';
-    if (type === 'warning') el.style.border = '1px solid rgba(251,191,36,0.4)';
+    const icons = { error: '❌', warning: '⚠️', success: '✅', info: 'ℹ️' };
+    const colors = {
+        error:   { bg: 'rgba(220,38,38,0.12)', border: 'rgba(248,113,113,0.5)', icon: '#f87171' },
+        warning: { bg: 'rgba(245,158,11,0.12)', border: 'rgba(251,191,36,0.5)', icon: '#fbbf24' },
+        success: { bg: 'rgba(34,197,94,0.12)',  border: 'rgba(74,222,128,0.5)',  icon: '#4ade80' },
+        info:    { bg: 'rgba(59,130,246,0.12)',  border: 'rgba(96,165,250,0.5)',  icon: '#60a5fa' },
+    };
+    const c = colors[type] || colors.info;
+    const icon = icons[type] || icons.info;
+
+    const el = document.createElement('div');
+    el.innerHTML = `
+        <div style="display:flex;align-items:flex-start;gap:10px;">
+            <span style="font-size:18px;flex-shrink:0;line-height:1.4;">${icon}</span>
+            <div style="text-align:left;line-height:1.6;font-size:13px;">${msg.replace(/\n/g, '<br>')}</div>
+        </div>
+    `;
+    el.style.cssText = `
+        position:fixed;bottom:60px;left:50%;transform:translateX(-50%) translateY(20px);
+        padding:14px 20px;border-radius:14px;font-size:13px;z-index:200;
+        background:${c.bg};color:#fff;max-width:420px;min-width:200px;
+        backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+        border:1px solid ${c.border};
+        box-shadow:0 8px 32px rgba(0,0,0,0.3),0 0 0 1px rgba(255,255,255,0.05) inset;
+        opacity:0;transition:all 0.35s cubic-bezier(0.16,1,0.3,1);
+    `;
     document.body.appendChild(el);
-    setTimeout(function() { el.style.opacity = '0'; setTimeout(function() { el.remove(); }, 300); }, 3000);
+
+    // 入场动画
+    requestAnimationFrame(() => {
+        el.style.opacity = '1';
+        el.style.transform = 'translateX(-50%) translateY(0)';
+    });
+
+    // 出场动画
+    setTimeout(() => {
+        el.style.opacity = '0';
+        el.style.transform = 'translateX(-50%) translateY(10px)';
+        setTimeout(() => el.remove(), 350);
+    }, 4000);
 }
 
 console.log('SimulCast 已就绪 | 视频搬运 + 字幕一体化 + 多语言支持');
