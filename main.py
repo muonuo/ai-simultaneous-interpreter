@@ -5,6 +5,7 @@ AI 同声传译助手 - FastAPI 服务入口
 """
 
 import base64
+import os
 from pathlib import Path
 import json
 import asyncio
@@ -14,6 +15,7 @@ load_dotenv()  # 最先加载 .env，确保所有模块能读到 API Key
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel
 
 from translator_live import LiveTranslator
 
@@ -118,3 +120,52 @@ async def static_files(filename: str):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000)
+
+
+# ============================================================
+# 摘要生成接口
+# ============================================================
+class SummaryRequest(BaseModel):
+    text: str
+    lang: str = "zh"  # zh 或 en
+
+
+@app.post("/api/summary")
+async def generate_summary(req: SummaryRequest):
+    """使用 DashScope 通义千问生成文本摘要"""
+    api_key = os.getenv("DASHSCOPE_API_KEY")
+    if not api_key:
+        return JSONResponse({"error": "未配置 DASHSCOPE_API_KEY"}, status_code=500)
+
+    try:
+        import httpx
+
+        prompt = f"请用一句话概括以下翻译内容的核心意思（不超过50字）：\n\n{req.text}"
+
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "qwen-turbo",
+                    "messages": [
+                        {"role": "system", "content": "你是一个文本摘要助手，用简洁的一句话概括内容。"},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "max_tokens": 100,
+                    "temperature": 0.3,
+                },
+            )
+
+        if resp.status_code != 200:
+            return JSONResponse({"error": f"API 调用失败: {resp.status_code}"}, status_code=500)
+
+        data = resp.json()
+        summary = data["choices"][0]["message"]["content"].strip()
+        return {"summary": summary}
+
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)

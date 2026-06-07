@@ -351,7 +351,11 @@ function renderHistory() {
             <div class="history-content">
                 ${item.en ? `<div class="h-en">${escapeHtml(item.en)}</div>` : ''}
                 <div class="h-zh">${escapeHtml(item.zh)}</div>
-                <div class="h-time">${formatTime(item.time)}</div>
+                <div class="h-bottom">
+                    <span class="h-time">${formatTime(item.time)}</span>
+                    <button class="h-summary-btn" data-index="${i}" onclick="generateSummary(${i})">📝 摘要</button>
+                </div>
+                <div class="h-summary" id="summary-${i}" style="display:none"></div>
             </div>
         </div>
     `).join('');
@@ -364,6 +368,59 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+// 生成摘要
+async function generateSummary(index) {
+    const history = getHistory();
+    const item = history[index];
+    if (!item) return;
+
+    const summaryEl = document.getElementById(`summary-${index}`);
+    const btn = document.querySelector(`.h-summary-btn[data-index="${index}"]`);
+
+    // 如果已经显示，点击隐藏
+    if (summaryEl.style.display !== 'none') {
+        summaryEl.style.display = 'none';
+        return;
+    }
+
+    // 如果已有缓存的摘要，直接显示
+    if (item.summary) {
+        summaryEl.textContent = item.summary;
+        summaryEl.style.display = 'block';
+        return;
+    }
+
+    // 调用 API 生成摘要
+    btn.disabled = true;
+    btn.textContent = '生成中...';
+    summaryEl.textContent = '正在生成摘要...';
+    summaryEl.style.display = 'block';
+
+    try {
+        const text = item.zh || item.en || '';
+        const resp = await fetch('/api/summary', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text }),
+        });
+
+        const data = await resp.json();
+        if (data.error) {
+            summaryEl.textContent = '生成失败: ' + data.error;
+        } else {
+            summaryEl.textContent = data.summary;
+            // 缓存摘要到历史记录
+            item.summary = data.summary;
+            localStorage.setItem('simulcast_history', JSON.stringify(history));
+        }
+    } catch (e) {
+        summaryEl.textContent = '生成失败，请重试';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '📝 摘要';
+    }
 }
 
 function formatTime(ts) {

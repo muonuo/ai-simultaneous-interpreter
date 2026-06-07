@@ -754,6 +754,45 @@ html, body {
     color: var(--text-muted);
     margin-top: 4px;
 }
+
+.history-content .h-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 4px;
+}
+
+.history-content .h-summary-btn {
+    font-size: 11px;
+    color: var(--accent);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.history-content .h-summary-btn:hover {
+    background: var(--accent-dim);
+    border-color: var(--accent);
+}
+
+.history-content .h-summary-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.history-content .h-summary {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: rgba(79,143,255,0.06);
+    border-left: 2px solid var(--accent);
+    border-radius: 0 4px 4px 0;
+    line-height: 1.5;
+}
 /* ── 语言选择器 ── */
 .lang-selector {
     display: flex;
