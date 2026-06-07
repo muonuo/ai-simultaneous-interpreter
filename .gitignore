@@ -34,3 +34,9 @@ Thumbs.db
 *.tmp
 *.bak
 .playwright-mcp
+
+# 开发工具（不提交到仓库）
+.claude/
+PLAN.md
+AGENTS.md
+CLAUDE.md
