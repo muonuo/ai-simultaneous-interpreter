@@ -18,6 +18,7 @@ const S = {
     _processor: null,
     _stream: null,
     _localFileUrl: null,
+    _seeking: false,
 };
 
 // ============================================================
@@ -61,6 +62,19 @@ function initVideoControls() {
         }
     });
 
+    // 点击视频本身也可以暂停/播放（仅本地文件模式）
+    D.videoPlayer.addEventListener('click', (e) => {
+        if (!S._localFileUrl) return;
+        e.stopPropagation();
+        if (D.videoPlayer.paused) {
+            D.videoPlayer.play();
+            D.vcPlay.textContent = '⏸';
+        } else {
+            D.videoPlayer.pause();
+            D.vcPlay.textContent = '▶';
+        }
+    });
+
     // 进度条更新
     D.videoPlayer.addEventListener('timeupdate', () => {
         if (!D.videoPlayer.duration) return;
@@ -82,6 +96,12 @@ function initVideoControls() {
     D.vcProgress.addEventListener('mousedown', (e) => {
         if (!D.videoPlayer.duration) return;
         isDragging = true;
+        S._seeking = true;
+        clearSubtitle();
+        sessionEn.length = 0;
+        sessionZh.length = 0;
+        currentEn = '';
+        currentZh = '';
         const rect = D.vcProgress.getBoundingClientRect();
         const pct = (e.clientX - rect.left) / rect.width;
         D.videoPlayer.currentTime = pct * D.videoPlayer.duration;
@@ -95,12 +115,16 @@ function initVideoControls() {
     });
 
     document.addEventListener('mouseup', () => {
-        isDragging = false;
+        if (isDragging) {
+            isDragging = false;
+            S._seeking = false;
+        }
     });
 
     // 拖动进度条后清空字幕
     D.videoPlayer.addEventListener('seeked', () => {
         if (!S.isTranslating || !S._localFileUrl) return;
+        S._seeking = false;
         clearSubtitle();
         sessionEn.length = 0;
         sessionZh.length = 0;
@@ -158,6 +182,7 @@ const MAX_LEN       = 100;    // 单句最大长度
 const MAX_LINES     = 2;      // 最多显示2行
 const MAX_HISTORY   = 100;    // 最多保存100条历史
 const MAX_SESSION   = 5;      // 会话最多保留5句
+const AUTO_SPLIT    = 80;     // 超过80字无断句时自动切分
 
 let fadeTimer = null;
 let currentEn = '';  // 当前英文句子
@@ -169,6 +194,9 @@ let lastDisplayTime = 0;
 const DISPLAY_THROTTLE = 50; // 50ms 节流，防止字幕跳动
 
 function handleDelta(enText, zhText, type) {
+    // 拖动进度条期间不更新字幕
+    if (S._seeking) return;
+
     D.overlay.classList.add('visible');
     resetTimers();
 
@@ -213,14 +241,36 @@ function handleDelta(enText, zhText, type) {
     renderLiveTranscript();
 }
 
-// 取最后2句话，限制总长度
+// 取最后2句话，限制总长度；无断句时自动按字数切分
 function getRecentSentences(text) {
     if (!text) return '';
-    // 按句号分割
+
+    // 先按自然断句分割
     const parts = text.split(/[。！？!?\n]+/).filter(s => s.trim());
 
+    // 如果只有一段且超长，按字数自动切分
+    let sentences = [];
+    for (const part of parts) {
+        if (part.length <= AUTO_SPLIT) {
+            sentences.push(part);
+        } else {
+            // 按逗号、分号等次级断点切分
+            const subParts = part.split(/[，；,;、]+/).filter(s => s.trim());
+            let buf = '';
+            for (const sp of subParts) {
+                if (buf.length + sp.length > AUTO_SPLIT && buf) {
+                    sentences.push(buf);
+                    buf = sp;
+                } else {
+                    buf = buf ? buf + '，' + sp : sp;
+                }
+            }
+            if (buf) sentences.push(buf);
+        }
+    }
+
     // 取最后2句
-    const recent = parts.slice(-MAX_LINES);
+    const recent = sentences.slice(-MAX_LINES);
     let result = recent.join('。');
 
     // 限制总长度
