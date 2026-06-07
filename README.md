@@ -15,7 +15,6 @@ git clone https://github.com/muonuo/ai-simultaneous-interpreter.git
   <img src="https://img.shields.io/badge/python-3.9+-blue" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
   <img src="https://img.shields.io/badge/platform-Web-blueviolet" alt="Platform">
-  <img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs">
 </p>
 
 ---
@@ -26,9 +25,10 @@ git clone https://github.com/muonuo/ai-simultaneous-interpreter.git
 - [🧩 系统架构](#-系统架构)
 - [🎯 功能特性](#-功能特性)
 - [🚀 快速开始](#-快速开始)
+- [💡 设计思路](#-设计思路)
 - [🔧 技术栈](#-技术栈)
 - [📐 项目结构](#-项目结构)
-- [📝 PR 记录](#-pr-记录)
+- [📝 开发记录](#-开发记录)
 - [🎬 演示视频](#-演示视频)
 - [📄 许可证](#-许可证)
 
@@ -156,6 +156,54 @@ PORT=8000
 
 ---
 
+## 💡 设计思路
+
+### 为什么选择浏览器方案？
+
+我们对比了三种技术路线：
+
+| 方案 | 优点 | 缺点 |
+|------|------|------|
+| Electron 桌面客户端 | 原生体验，可打包为 .exe | 需要安装，仅限桌面端 |
+| PyQt 桌面客户端 | 支持系统音频捕获 | 仅限 Windows，需要 Python 环境 |
+| **Web 浏览器** | **零安装，全平台支持，手机平板也能用** | 仅能捕获标签页音频 |
+
+我们选择了 Web 方案，因为 AI 同声传译是高频但非刚需的工具，用户不愿意为了偶尔使用而安装软件。浏览器打开即用，使用门槛最低。
+
+### 为什么选择 LiveTranslate？
+
+我们尝试了三种语音翻译方案：
+
+| 方案 | 延迟 | 准确率 | 纠错 |
+|------|------|--------|------|
+| 浏览器内置语音识别 | 低 | 低，特别是专业术语 | 无 |
+| 语音识别 + 文本翻译（两步） | 3-5 秒 | 高 | 需要额外开发 |
+| **阿里云 LiveTranslate（端到端）** | **约 1 秒** | **高** | **内置纠错** |
+
+LiveTranslate 是端到端模型，语音直接翻译成目标语言，无需先识别再翻译，延迟最低且内置纠错能力。
+
+### 为什么设计视频搬运模式？
+
+我们尝试了三种字幕显示方案：
+
+| 方案 | 问题 |
+|------|------|
+| 弹窗模式 | 窗口边框不美观，需要手动调整位置 |
+| 画中画模式 | 浏览器兼容性差，样式不可控 |
+| **视频搬运模式** | **视频和字幕在同一个页面，一体化体验** |
+
+视频搬运模式让用户在一个页面内同时看到视频画面和翻译字幕，无需在多个窗口之间切换，体验最流畅。
+
+### 如何实现智能纠错？
+
+语音识别和翻译都可能出错，特别是长句子或专业术语。LiveTranslate 会在翻译过程中发现之前的错误，并返回修正后的结果。我们在前端通过视觉提示（字幕闪烁）告知用户当前内容已被修正，让用户知道系统在持续优化翻译质量。
+
+### 如何采集浏览器音频？
+
+浏览器提供了屏幕捕获 API，可以获取标签页的视频画面和音频。我们使用音频处理技术将捕获的音频转换为 LiveTranslate 需要的格式（16kHz 采样率），并通过 WebSocket 实时传输到服务器。整个过程在浏览器端完成，音频数据不会存储在本地。
+
+---
+
 ## 🔧 技术栈
 
 | 类别 | 技术 | 用途 |
@@ -193,14 +241,17 @@ ai-simultaneous-interpreter/
 
 ---
 
-## 📝 PR 记录
+## 📝 开发记录
 
-| PR | 分支 | 功能 | 说明 |
-|---|---|---|---|
-| #1 | `feature/export-format-selector` | 导出格式选择器 | 支持 PDF / Word / TXT 三种格式导出，客户端生成 |
-| #2 | `feature/aurora-background` | 极光动态背景 | 三层背景：极光渐变 + 音波流动 + 粒子漂浮 |
-| #3 | `feature/local-file-playback` | 本地文件播放 | 支持本地视频文件，带播放控制（暂停/进度/音量） |
-| #4 | `feature/history-summary` | 历史摘要功能 | DashScope Qwen 生成翻译摘要，支持缓存 |
+| 功能 | 分支 | 说明 |
+|---|---|---|
+| 导出格式选择器 | `feature/export-format-selector` | 支持 PDF / Word / TXT 三种格式导出 |
+| 极光动态背景 | `feature/aurora-background` | 三层背景：极光渐变 + 音波流动 + 粒子漂浮 |
+| 本地文件播放 | `feature/local-file-playback` | 支持本地视频文件，带播放控制 |
+| 历史摘要功能 | `feature/history-summary` | DashScope Qwen 生成翻译摘要 |
+| 音量控制 | `main` | 视频播放时调节音量 |
+| 智能断句 | `main` | 无标点长句自动切分，避免字幕堆积 |
+| Toast 优化 | `main` | 毛玻璃通知卡片，友好错误提示 |
 
 ---
 
