@@ -44,6 +44,7 @@ const D = {
     vcBar:        document.getElementById('vc-progress-bar'),
     vcTime:       document.getElementById('vc-time'),
     vcMute:       document.getElementById('vc-mute'),
+    vcVolume:     document.getElementById('vc-volume'),
 };
 
 // ============================================================
@@ -112,6 +113,14 @@ function initVideoControls() {
     D.vcMute.addEventListener('click', () => {
         D.videoPlayer.muted = !D.videoPlayer.muted;
         D.vcMute.textContent = D.videoPlayer.muted ? '🔇' : '🔊';
+    });
+
+    // 音量
+    D.vcVolume.addEventListener('input', () => {
+        const v = parseFloat(D.vcVolume.value);
+        D.videoPlayer.volume = v;
+        D.videoPlayer.muted = v === 0;
+        D.vcMute.textContent = v === 0 ? '🔇' : '🔊';
     });
 
     // 键盘快捷键
