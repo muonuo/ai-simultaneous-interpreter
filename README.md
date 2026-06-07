@@ -84,6 +84,18 @@ git clone https://github.com/muonuo/ai-simultaneous-interpreter.git
 - 📄 **多格式导出** — PDF / Word / TXT，客户端生成
 - 🎨 **科技感 UI** — 极光背景 + 音波 + 粒子 + 毛玻璃字幕
 
+### 主页面
+
+![主页面](image/主页面.png)
+
+### 翻译 + 历史记录
+
+![翻译以及历史记录](image/翻译以及历史记录.png)
+
+### 历史记录导出
+
+![支持历史记录的导出](image/支持历史记录的导出.png)
+
 ---
 
 ## 🚀 快速开始
@@ -218,9 +230,7 @@ ai-simultaneous-interpreter/
 
 ## 🎬 演示视频
 
-<!-- TODO: 替换为你的演示视频链接 -->
-
-https://github.com/user-attachments/assets/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+[▶️ 点击观看演示视频（B站）](https://www.bilibili.com/video/BV1QDEt62EoG/)
 
 > 视频展示了 SimulCast 的核心功能：标签页音频捕获、实时字幕翻译、本地视频播放、历史记录导出等。
 
